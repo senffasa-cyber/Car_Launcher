@@ -154,7 +154,8 @@ adb shell am broadcast -a arena.car.VEHICLE --ef speed 47.5 --ef coolant 88   # 
 * **کامپایل: بله، در CI.** هر push روی `.github/workflows/build-apk.yml` اجرا می‌شود و
   `Assemble debug APK` تنها مرحله‌ی بازدارنده است؛ `Assemble release APK` (R8 + کوچک‌سازی منابع) و
   `Lint report` بعد از آن می‌آیند و شکستشان فقط اعلام می‌شود، نه اینکه APK دیباگ را بلوکه کند.
-  خروجی در artifact به نام `carlauncher-apk` (≈ ۷۵۰ کیلوبایت برای هر دو APK).
+  خروجی در artifact به نام `carlauncher-apk` (zip ≈ ۷۵۰ کیلوبایت؛ خودِ APKها ۰٫۹ مگابایت release و
+  ۳٫۶ مگابایت debug).
 * **بررسی‌های ایستا:** `tools/check_project.py` (ده بخش)، `tools/check_members.py`، `tools/check_docs.py`،
   `tools/validate_jalali.py` — همه صفر خطا، و در همان workflow قبل از build اجرا می‌شوند.
 * **آزمون واحد:** `tools/validate_jalali.py` (۷۳٬۴۱۴ روز، رفت و برگشت)؛ همین یک الگوریتم تقویم را سر پا
@@ -163,6 +164,9 @@ adb shell am broadcast -a arena.car.VEHICLE --ef speed 47.5 --ef coolant 88   # 
   همان چیزهایی است که فقط روی پنل معلوم می‌شود (چگالی، نوار وضعیت، کلیدهای OEM، فریمور نشان).
 
 ### APK آماده از GitHub
+
+مستقیم‌ترین راه: [`releases/latest`](https://github.com/senffasa-cyber/Car_Launcher/releases/latest) — هر
+tag با پیشوند `v` یک Release با دو APK منتشر می‌کند. راه دوم (تازه‌ترین build، حتی بدون tag):
 
 ۱. تب **Actions** ← تازه‌ترین run سبز ← پایین صفحه ← `carlauncher-apk` (یک zip با دو فایل `carlauncher-debug.apk`
    و `carlauncher-release.apk`). artifact سی روز می‌ماند؛ tag با پیشوند `v` یک GitHub Release می‌سازد.
