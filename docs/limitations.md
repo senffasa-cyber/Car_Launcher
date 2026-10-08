@@ -3,33 +3,48 @@
 این فایل را جدی بخوانید اگر می‌خواهید پروژه را ادامه دهید. بخشی از آن «ایراد طراحی» است، بخشی «چیزی که
 در این محیط ممکن نبود».
 
-## ۱) پروژه هرگز کامپایل نشده است
+## ۱) ساخت: کامپایل در CI سبز است؛ اجرای واقعی روی دستگاه نه
 
-محل نوشتن کد، چیزی شبیه یک sandbox بود: **نه JDK، نه Android SDK، نه Gradle، نه دسترسی به maven** —
-هیکدام. پس `./gradlew assembleDebug` یک‌بار هم اجرا نشده. در عوض شش ابزار بررسی ایستا نوشته و اجرا شده‌اند
-که همه صفر خطا پایان می‌یابند (check_project خود هفت بخش دارد):
+`./gradlew assembleDebug` و `assembleRelease` حالا واقعاً اجرا می‌شوند — در GitHub Actions
+(`.github/workflows/build-apk.yml`، Gradle ۸.۲ / JDK ۱۷ / Platform 34) و هر دو سبزاند. این بخش را به‌ همین
+خاطر نگه داشته‌ام: برای کسی که پروژه را ادامه می‌دهد، دانستن اینکه **کدام دسته خطا فقط در کامپایل دیده شد**
+ارزش دارد. اولین build واقعی **۱۰۴ خطا** داد و چهار دور طول کشید تا صفر شود. خطاها تصادفی نبودند؛ همه از
+شش خانواده‌اند:
 
-```bash
-python3 tools/gen_icons.py      # 74 drawable تولید/بروزرسانی می‌کند و XML را می‌سنجد
-python3 tools/gen_strings.py    # strings.xml (en) + values-fa را می‌سازد، پارامترها را مقایسه می‌کند
-python3 tools/check_project.py  # منابع، مانیفست، توازن کروشه، گارد نسخه، XML، gradle، setterها
-python3 tools/check_members.py  # هر SomeObject.member روی object/class خودی وجود دارد؟
-python3 tools/validate_jalali.py# 73,414 روز تقویم شمسی، رفت و برگشت
-```
+1. **بسته‌ی اشتباه، نام درست.** `import android.media.session.MediaMetadata` — فقط
+   `MediaController`/`MediaSession`/`PlaybackState` در `.session`‌اند؛ `MediaMetadata` در `android.media`
+   است. نه‌تنها `check_project`، هیچ ابزار متن‌محوری این را نمی‌گیرد.
+2. **تعارض امضای JVM.** `var headingUp` خودش `setHeadingUp(Z)V` تولید می‌کند؛ `fun setHeadingUp(on: Boolean)`
+   کنارش خطاست، هرچند هر دو declaration به‌تنهایی درست‌اند. حالا `check_project` این الگو را می‌گیرد
+   (بخش `jvm signature clashes`) و رفتار به setter منتقل شد.
+3. **سایه‌پذیری داخل `apply`.** داخل `GradientDrawable().apply { … }` نام `colors` به `getColors()` خودِ
+   drawable می‌رسد، نه `Palette.colors` — خطای نوعی، ولی با پیامی که جای اشتباه را نشان می‌دهد.
+   بخش `apply shadowing` برای همین اضافه شد.
+4. **غلط‌های املائیِ نوعِ «فرض‌کردن API».** `ViewPager2.recycledViewPool` وجود ندارد ( RecyclerView داخلی‌اش
+   `getChildAt(0)` است)، `LruCache.trimMemory()` نیست (`trimToSize`)، `Notification.getStyle()` و
+   `Notification.CATEGORY_GUIDANCE` روی SDK عمومی @hide‌اند، `android.app.NotificationManagerCompat`
+   اصلاً وجود ندارد، `Instrumentation.sendKeyCode` هم نیست (`sendKeyDownUpSync`، و نه روی نخ اصلی)، و
+   `AppWidgetHost.getAppWidgetInfo` متد `AppWidgetManager` است نه host.
+5. **تبدیل‌های عددی.** `Double` به‌جای `Float` در پروژسیون مینکیتور و `Rect.set`، `Views.dp(ctx, 420)`
+   (پارامتر `Float` است)، `Long` به `roundToInt()` که روی `Long` تعریف نشده.
+6. **ساختار فایل.** یک `private fun behaviour(): List<View>() {` (نوع بازگشتی با پرانتز فراخوانی) باعث شد
+   پارسر کل فایل را از دست بدهد و ۸ خطای بی‌ربط در فاصله‌ی ۳۰۰ خطی تولید کند؛ و `const val`هایی که یک
+   جابه‌جایی، آن‌ها را از `companion object` به بدنه‌ی کلاس برده بود — که هم `const` را غیرقانونی می‌کند هم
+   `SettingsActivity.open(...)` را از دسترس خارج.
 
-این ابزارها چند باگ واقعی را گرفتند (۴ پرانتز اضافه، ۱۳ setter که مقدار را نادیده می‌گرفتند، یک الگوریتم
-تقویم که در یک سالِ خاص «ماه ۱۳» تولید می‌کرد، یک callback بی‌استدعا که کپی رفرنس بود، و چند نام عضو که
-وجود نداشت). اما **نمی‌توانند** کارهای زیر را بکنند، پس انتظار داشته باشید اولین build این‌ها را پیدا کند:
+هر دسته که پیدا شد، به ابزار ایستا اضافه شد تا تکرار نشود: `check_setters`، `check_layoutparams_receiver`،
+`check_member_shapes`، `check_apply_shadowing`، `check_jvm_signature_clashes` — و همه‌شان با یک فایل آزمونِ
+عمدی (مثبت و منفی) راستی‌آزمایی شدند، چون بررسی‌ای که هیچ‌چیز را نمی‌گیرد بدتر از نبودنش است.
 
-* خطاهای نوعی و تبدیل‌ها (`Float` در برابر `Double`، `Int` در برابر `Long`).
-* فراخوانی متد با آرگومان اشتباه وقتی نام متد درست است (بیشتر در APIهای اندروید که برای این ابزار قابل
-  دیدن نیستند).
-* APIهایی که روی `minSdk 24` موجود نیستند ولی داخل `try/catch` افتاده‌اند و lint روی آن‌ها سکوت می‌کند.
-* ارجاع‌های سرهم‌شده با `import …*` و نام‌های هم‌پوشان بین فایل‌ها.
+یک تصمیم طراحی هم از همین دور بیرون آمد: `MediaHub` از پوشش‌های `androidx.media` به `android.media.session`
+مستقیم منتقل شد. `MediaSessionManager.getActiveSessions()` همان `List<MediaController>` را برمی‌گرداند و
+پلِ reflection برای `MediaSessionCompat.Token` فقط کد مرده بود. با آن رفتن، وابستگی
+`androidx.media:media` هم حذف شد و فهرست کتابخانه‌ها به پنج AndroidX بعلاوه‌ی coroutines رسید.
 
-بنابراین: **`assembleDebug` اولین آزمون واقعی است.** احتمال اینکه با یک‌بار build سبز شود کم است؛ معمولاً
-۵ تا ۲۰ اصلاح خطی لازم است. `lint` عملاً خاموش است (`checkReleaseBuilds false`) چون بدون ساخت، خروجی‌اش
-قابل خواندن نیست.
+**هنوز آزمون‌نشده:** رفتار در زمان اجرا. کامپایل سبز یعنی type‌ها درست‌اند، نه اینکه کارت وسط موقع پخش
+موسیقی جابه‌جا می‌شود، کاشی‌های نشان روی شبکه‌ی خودرو لود می‌شوند، یا `CallOverlayService` روی فریمور چینی
+اجازه‌ی overlay می‌گیرد. §۲ و §۳ همان‌هاست. `lintDebug` هم در CI اجرا می‌شود ولی **غیربازدارنده** است
+(`checkReleaseBuilds false`)؛ یعنی هشدارهایش را باید در گزارش lint دید، نه در وضعیت run.
 
 ## ۲) چیزهایی که فقط روی دستگاه معنی دارند
 

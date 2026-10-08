@@ -15,11 +15,12 @@
 نوار برنامه‌های پایین (Dock) با ویرایش لمسی، شبکه‌ی همه‌ی برنامه‌ها با جست‌وجو، تم روز/شب/AMOLED خودکار،
 حرکت‌های انگشتی قابل تنظیم، قفل ساده‌شده هنگام رانندگی، بنر تماس روی صفحه، و پشتیبانی از یک ویجت بیرونی.
 
-> ⚠ **مهم:** این پروژه در محیطی نوشته شده که **هیچ ابزار ساختی (JDK / Android SDK / Gradle) نداشت**،
-> بنابراین **کامپایل نشده است**. به‌جای کامپایل، شش بررسی ایستا نوشته و اجرا شده‌اند (ذیل همین
-> فایل؛ `check_project` خودش هفت بخش دارد).
-> انتظار داشته باشید که در اولین `./gradlew assembleRelease` چند خطای نوعی یا جا‌افتاده پیدا شود؛
-> فایل‌های `tools/check_*.py` همان‌ها را تا حد ممکن از پیش گرفته‌اند. جزئیات: `docs/limitations.md`.
+> ✅ **وضعیت ساخت:** پروژه در GitHub Actions واقعاً ساخته می‌شود — `assembleDebug` و `assembleRelease`
+> هر دو سبز، با Gradle ۸.۲ / JDK ۱۷ / SDK ۳۴ (فایل `.github/workflows/build-apk.yml`). اولین build واقعی
+> ۱۰۴ خطا داد و در چهار دور رفع شد؛ آن خطاها دقیقاً همان دسته‌ای بودند که بررسی ایستا نمی‌بیند
+> (`docs/limitations.md` §۱).
+> چیزی که هنوز آزمون نشده **اجرا روی دستگاه شماست**: چگالی پنل، فریمور نشان، و رفتار MediaSessionِ
+> پخش‌کننده‌ها فقط روی همین یونیت قابل دیدن است.
 
 ## ساخت و نصب (خلاصه)
 
@@ -78,6 +79,7 @@ tools/validate_jalali.py    mirror از Jalali.kt + آزمون ۷۳٬۴۱۴ رو
 tools/preview_icons.py      صفحه‌ی contact-sheet برای نگاه‌کردن به آیکون‌ها
 tools/gen_icons.py          تولید ۷۴ آیکون برداری
 tools/gen_strings.py        تولید strings (en + fa) و بررسی برابری پارامترها
+tools/ci-errors.awk         خطاهای کامپایل CI را به annotation تبدیل می‌کند (هر فایل یک‌جا)
 docs/                       مستندات فارسی
 ```
 
@@ -149,5 +151,24 @@ adb shell am broadcast -a arena.car.VEHICLE --ef speed 47.5 --ef coolant 88   # 
 
 ## وضعیت راستی‌آزمایی
 
-پروژه **کامپایل نشده است** (محیط ساخت نداشت). هفت بررسی ایستا نوشته و اجرا شده و هر هفت صفر خطا هستند؛
-`docs/limitations.md` فهرست کارهایی است که فقط با ساختن/اجرا کردن مشخص می‌شود.
+* **کامپایل: بله، در CI.** هر push روی `.github/workflows/build-apk.yml` اجرا می‌شود و
+  `Assemble debug APK` تنها مرحله‌ی بازدارنده است؛ `Assemble release APK` (R8 + کوچک‌سازی منابع) و
+  `Lint report` بعد از آن می‌آیند و شکستشان فقط اعلام می‌شود، نه اینکه APK دیباگ را بلوکه کند.
+  خروجی در artifact به نام `carlauncher-apk` (≈ ۷۵۰ کیلوبایت برای هر دو APK).
+* **بررسی‌های ایستا:** `tools/check_project.py` (ده بخش)، `tools/check_members.py`، `tools/check_docs.py`،
+  `tools/validate_jalali.py` — همه صفر خطا، و در همان workflow قبل از build اجرا می‌شوند.
+* **آزمون واحد:** `tools/validate_jalali.py` (۷۳٬۴۱۴ روز، رفت و برگشت)؛ همین یک الگوریتم تقویم را سر پا
+  نگه داشت. بقیه‌ی منطق، عمداً، با ساخت‌ونمایش سنجیده می‌شود.
+* **آزمون روی دستگاه: نه.** هیچ اجرای واقعی روی هده‌یونیت انجام نشده؛ `docs/limitations.md` §۲ فهرست
+  همان چیزهایی است که فقط روی پنل معلوم می‌شود (چگالی، نوار وضعیت، کلیدهای OEM، فریمور نشان).
+
+### APK آماده از GitHub
+
+۱. تب **Actions** ← تازه‌ترین run سبز ← پایین صفحه ← `carlauncher-apk` (یک zip با `carlauncher-debug.apk`
+   و `carlauncher-release.apk`). artifact سی روز می‌ماند؛ tag با پیشوند `v` یک GitHub Release می‌سازد.
+۲. اگر `gh` نصب دارید: `gh run download <run-id> -n carlauncher-apk`.
+۳. نصب: `adb install -r carlauncher-release.apk` — یا کپی روی فلش و نصب مستقیم، که روی هده‌یونیت
+   معمولاً ساده‌تر از adb است.
+
+اگر `gradle-wrapper.jar` را در ریپو نمی‌بینید عمدی است: workflow آن را با `gradle wrapper` می‌سازد. برای
+ساخت محلی، `scripts/bootstrap-gradle.sh` همان کار را می‌کند.

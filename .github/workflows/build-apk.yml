@@ -31,6 +31,12 @@ jobs:
     name: Gradle 8.2 / JDK 17 / SDK 34
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    # `contents: write` is here for one step only (Publish GitHub Release, which runs on `v*` tags);
+    # everything else in this job is read-only. Declared at job level because the runner image and the
+    # gradle cache need `contents: read` too, and write ⊇ read — a step-level grant would work as well
+    # only while the job leaves permissions unset.
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
@@ -157,6 +163,33 @@ jobs:
           path: out/*.apk
           if-no-files-found: error
           retention-days: 30
+
+      # A `v*` tag push also publishes a GitHub Release with both APKs attached: a browser click instead
+      # of digging through Actions artifacts, and the only copy that outlives the 30-day retention window.
+      - name: Publish GitHub Release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          {
+            echo 'ساخته‌شده در GitHub Actions — Gradle ۸.۲ / JDK ۱۷ / Platform ۳۴.'
+            echo
+            echo '- `carlauncher-release.apk` — نسخه‌ی پیشنهادی (R8 + کوچک‌سازی منابع)'
+            echo '- `carlauncher-debug.apk` — همان کد بدون shrinking، برای logcat و دیباگ'
+            echo
+            echo 'امضا: keystore دیباگِ همین run. اگر `CAR_LAUNCHER_KEYSTORE` و سه‌تایر alias/پسورد را در'
+            echo 'Secrets بگذارید، امضا ثابت می‌ماند و نصب نسخه‌ی جدید بدون حذف قبلی کار می‌کند'
+            echo '(جزئیات: `docs/build-install.md`).'
+          } > /tmp/notes.md
+          tag="${GITHUB_REF_NAME}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --latest --notes-file /tmp/notes.md
+            gh release upload "$tag" out/*.apk --clobber
+          else
+            gh release create "$tag" out/*.apk --title "Car Launcher $tag" --notes-file /tmp/notes.md
+          fi
+          gh release view "$tag" | head -25
 
       - name: Upload build reports
         if: failure()

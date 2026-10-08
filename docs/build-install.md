@@ -1,5 +1,22 @@
 # ساخت، امضا، نصب، دسترسی‌ها
 
+## ۰. کوتاه‌ترین راه: APK آماده از GitHub
+
+اگر فقط APK می‌خواهید و لازم نیست خودتان بسازید: در ریپو تب **Actions** ← انتخاب آخرین run سبز ← پایین
+صفحه ← artifact به نام `carlauncher-apk`. داخلش `carlauncher-debug.apk` و `carlauncher-release.apk` است
+(هر دو ≈ ۳۸۰ کیلوبایت؛ روی دستگاه ۲٫۷۲ گیگ، نسخه‌ی release را نصب کنید). artifact سی روز می‌ماند؛ برای
+همیشه، tag با پیشوند `v` بزنید — همان workflow یک GitHub Release با هر دو APK منتشر می‌کند. با ابزار هم:
+
+```bash
+gh run list --workflow build-apk.yml --limit 1        # run id
+gh run download <run-id> -n carlauncher-apk
+```
+
+**نکته‌ی امضا:** هر run کلید `debug.keystore` تازه‌ای می‌سازد، پس APK دو run مختلف امضای متفاوت دارند و
+نصب روی نسخه‌ی قبلی (`adb install -r`) با `INSTALL_FAILED_UPDATE_INCOMPATIBLE` رد می‌شود. برای به‌روزرسانی بدون حذف،
+کلید ثابت را در Secret با نام `CAR_LAUNCHER_KEYSTORE` (به‌علاوه‌ی سه‌تایر alias/پسورد) بگذارید؛ workflow آن را
+به `app/build.gradle` وصل می‌کند. برای build دستی، بخش ۲ را ببینید.
+
 ## ۱. پیش‌نیازها
 
 | چیزی | نسخه | نکته |
@@ -35,7 +52,9 @@ export CAR_LAUNCHER_STORE_PASSWORD='…'
 ```
 
 نکته‌ی مهم: اگر بعداً نسخه‌ی با امضای دیگر نصب می‌کنید، اول نسخه‌ی قبلی را حذف کنید؛ در غیر این صورت
-`INSTALL_FAILED_UPDATE_INCOMPATIBLE` می‌گیرید و تنظیمات کاربر هم پاک می‌شود.
+`INSTALL_FAILED_UPDATE_INCOMPATIBLE` می‌گیرید و تنظیمات کاربر هم پاک می‌شود. همین دلیلِ توصیه‌ی بالای این
+بخش است (artifact هر run کلید تازه دارد)، و همین است که `CAR_LAUNCHER_KEYSTORE` را به یک secret جدی تبدیل
+می‌کند — وگرنه هر APK تازه از CI یعنی حذف و نصبِ دوباره و رفتن چیدمان کارت‌ها.
 
 ## ۳. نصب و بالا آوردن
 
