@@ -38,6 +38,9 @@
     <string name="clock_no_weather">Weather is off — enable it in settings</string>
     <string name="clock_note">The Jalali date is computed in the launcher, not looked up in a table, so it works with no network and no Play Services.</string>
     <string name="clock_sun">Sunrise %1$s · Sunset %2$s</string>
+    <string name="crash_clear">Clear the crash log</string>
+    <string name="crash_cleared">Crash log cleared</string>
+    <string name="crash_none">No crash recorded. If the launcher still will not open, the problem is not a Java exception: check that the app is allowed to be the default home.</string>
     <string name="day_today">Today</string>
     <string name="day_tomorrow">Tomorrow</string>
     <string name="debug_dump_shown">Copy it from the sheet</string>
@@ -52,6 +55,7 @@
     <string name="export_failed">Export failed: %1$s</string>
     <string name="finish">Finish</string>
     <string name="gesture_none">Nothing</string>
+    <string name="launcher_will_not_open">Car Launcher could not build its home screen</string>
     <string name="layout_note">Which card is where. The centre carousel is the one you swipe.</string>
     <string name="lock_body">The launcher is hiding things you should not touch while moving. This is a distraction guard, not a lock on the car.</string>
     <string name="lock_i_am_parked">I am parked</string>
@@ -171,6 +175,8 @@
     <string name="pref_climate_tiles_sum">Each tile: label, icon, action, extra. The action is sent as a broadcast.</string>
     <string name="pref_clock_24">24-hour clock</string>
     <string name="pref_corner">Card corner radius</string>
+    <string name="pref_crash_report">Crash report</string>
+    <string name="pref_crash_report_sum">What killed the last boots, read from this device</string>
     <string name="pref_debug_log">Verbose logcat</string>
     <string name="pref_default_home">Set as default home app</string>
     <string name="pref_default_home_sum">The system picker decides; choose “Car Launcher” and “Always”.</string>
@@ -228,6 +234,8 @@
     <string name="pref_restart_service">Restart the launcher service</string>
     <string name="pref_right_cards">Right column</string>
     <string name="pref_right_cards_sum">Mini cards. Only on wide panels.</string>
+    <string name="pref_safe_mode">Safe mode</string>
+    <string name="pref_safe_mode_sum">Three cards, no wallpaper, no background service — for when the home screen will not come up</string>
     <string name="pref_seconds">Show seconds</string>
     <string name="pref_show_route">Draw the planned route</string>
     <string name="pref_show_route_sum">Asks a public routing server; needs the internet.</string>
@@ -257,6 +265,7 @@
     <string name="pref_wheel_play_sum">Needed on units without a media button policy.</string>
     <string name="pref_work_place">Work</string>
     <string name="pref_zoom">Default zoom</string>
+    <string name="safe_mode_retry">Tap anywhere to restart in safe mode. The trace below is also in filesDir/crash.log.</string>
     <string name="search_here">Use current location</string>
     <string name="search_hint">Search a place…</string>
     <string name="search_hint_empty">Type at least two letters</string>

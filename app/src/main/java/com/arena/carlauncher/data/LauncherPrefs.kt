@@ -53,16 +53,27 @@ class LauncherPrefs private constructor(private val sp: SharedPreferences) {
         set(v) = put(K_FA_DIGITS, v)
 
     // ---------------------------------------------------------------- layout
+    /**
+     * Minimal boot: the three cards the launcher is *for*, no wallpaper, no side strips, no services.
+     * [com.arena.carlauncher.util.CrashLog] turns it on after two starts that never finished building a
+     * home screen; Settings → Debug can force it either way. The getters below honour it rather than
+     * rewriting the saved lists, because a launcher that wipes your layout on the way past a crash is
+     * worse than one that ignores it for a boot.
+     */
+    var safeMode: Boolean
+        get() = sp.getBoolean(K_SAFE_MODE, false)
+        set(v) = put(K_SAFE_MODE, v)
+
     var centerCards: List<String>
-        get() = csv(K_CENTER_CARDS, DEFAULT_CENTER)
+        get() = if (safeMode) SAFE_CARDS else csv(K_CENTER_CARDS, DEFAULT_CENTER)
         set(v) = putCsv(K_CENTER_CARDS, v)
 
     var leftCards: List<String>
-        get() = csv(K_LEFT_CARDS, DEFAULT_LEFT)
+        get() = if (safeMode) EMPTY else csv(K_LEFT_CARDS, DEFAULT_LEFT)
         set(v) = putCsv(K_LEFT_CARDS, v)
 
     var rightCards: List<String>
-        get() = csv(K_RIGHT_CARDS, DEFAULT_RIGHT)
+        get() = if (safeMode) EMPTY else csv(K_RIGHT_CARDS, DEFAULT_RIGHT)
         set(v) = putCsv(K_RIGHT_CARDS, v)
 
     /** `pkg|/class` tokens, order matters. */
@@ -455,6 +466,8 @@ class LauncherPrefs private constructor(private val sp: SharedPreferences) {
 
         const val DEFAULT_ACCENT = 0xFF3DDC97.toInt()
         const val DEFAULT_CENTER = "music,map,clock,vehicle,weather"
+        private val EMPTY = emptyList<String>()
+        private val SAFE_CARDS = listOf(Cards.MUSIC, Cards.MAP, Cards.CLOCK)
         const val DEFAULT_LEFT = "tiles,nav"
         const val DEFAULT_RIGHT = "clock,trip"
 
@@ -526,6 +539,7 @@ class LauncherPrefs private constructor(private val sp: SharedPreferences) {
         private const val K_TRIP_LAST = "trip_last"
         private const val K_DEBUG = "debug_log"
         private const val K_CALL_BANNER = "call_banner"
+        private const val K_SAFE_MODE = "safe_mode"
 
         @Volatile
         private var instance: LauncherPrefs? = null

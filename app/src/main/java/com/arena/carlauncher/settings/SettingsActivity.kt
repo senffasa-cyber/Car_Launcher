@@ -25,6 +25,7 @@ import com.arena.carlauncher.services.LauncherService
 import com.arena.carlauncher.theme.DayNightController
 import com.arena.carlauncher.theme.Palette
 import com.arena.carlauncher.ui.Views
+import com.arena.carlauncher.util.CrashLog
 import com.arena.carlauncher.util.Format
 import com.arena.carlauncher.vehicle.VehicleHub
 import com.arena.carlauncher.weather.WeatherRepository
@@ -490,6 +491,18 @@ class SettingsActivity : androidx.appcompat.app.AppCompatActivity() {
         out.add(PrefRows.action(this, getString(R.string.pref_dump), "", R.drawable.ic_info) {
             Views.toast(this, R.string.debug_dump_shown)
             LogSheet.show(this, dumpText())
+        })
+        out.add(PrefRows.action(this, getString(R.string.pref_crash_report), getString(R.string.pref_crash_report_sum), R.drawable.ic_info) {
+            val body = CrashLog.recent().ifBlank { getString(R.string.crash_none) }
+            LogSheet.show(this, "unfinished starts: ${CrashLog.pendingStarts}\n$body")
+        })
+        out.add(PrefRows.switchRow(this, getString(R.string.pref_safe_mode), getString(R.string.pref_safe_mode_sum), prefs.safeMode) {
+            prefs.safeMode = it
+            recreate()
+        })
+        out.add(PrefRows.action(this, getString(R.string.crash_clear), "", R.drawable.ic_reset) {
+            CrashLog.clear()
+            Views.toast(this, R.string.crash_cleared)
         })
         out.add(PrefRows.action(this, getString(R.string.pref_export), getString(R.string.pref_export_sum), R.drawable.ic_arrow_up) {
             exportSettings()

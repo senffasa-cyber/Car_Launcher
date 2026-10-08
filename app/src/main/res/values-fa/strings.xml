@@ -38,6 +38,9 @@
     <string name="clock_no_weather">هواشناسی خاموش است — از تنظیمات روشن کنید</string>
     <string name="clock_note">تاریخ جلالی در خودِ لانچر محاسبه می‌شود؛ بدون شبکه و بدون سرویس گوگل کار می‌کند.</string>
     <string name="clock_sun">طلوع %1$s · غروب %2$s</string>
+    <string name="crash_clear">پاک‌کردن گزارش کرش</string>
+    <string name="crash_cleared">گزارش کرش پاک شد</string>
+    <string name="crash_none">هیچ کرشی ثبت نشده. اگر باز هم لانچر بالا نیامد، مشکل استثنا نیست: ببینید اجازه دارد پیش‌فرض خانه باشد.</string>
     <string name="day_today">امروز</string>
     <string name="day_tomorrow">فردا</string>
     <string name="debug_dump_shown">از پنجره کپی کنید</string>
@@ -52,6 +55,7 @@
     <string name="export_failed">خروجی نگرفت شد: %1$s</string>
     <string name="finish">پایان</string>
     <string name="gesture_none">هیچ</string>
+    <string name="launcher_will_not_open">ماشین لانچر نتوانست صفحه‌ی خانه را بسازد</string>
     <string name="layout_note">کدام کارت کجا باشد. کاروسل وسط همان است که با انگشت جابه‌جا می‌شود.</string>
     <string name="lock_body">لانچر چیزهایی را که نباید هنگام حرکت لمس شوند پنهان کرده است. این فقط جلوگیری از حواس‌پرتی است، نه قفل خودرو.</string>
     <string name="lock_i_am_parked">پارک کرده‌ام</string>
@@ -171,6 +175,8 @@
     <string name="pref_climate_tiles_sum">هر کاشی: برچست، نماد، اکشن، پارامتر. اکشن به‌صورت اعلان فرستاده می‌شود.</string>
     <string name="pref_clock_24">ساعت ۲۴گانه</string>
     <string name="pref_corner">گوشه‌ی کارت‌ها</string>
+    <string name="pref_crash_report">گزارش کرش</string>
+    <string name="pref_crash_report_sum">چه چیزی بوت‌های اخیر را روی همین دستگاه کشت</string>
     <string name="pref_debug_log">لاگ پرجمعیت</string>
     <string name="pref_default_home">انتخاب به‌عنوان خانه</string>
     <string name="pref_default_home_sum">سیستم می‌پرسد؛ «ماشین لانچر» و «همیشه» را بزنید.</string>
@@ -228,6 +234,8 @@
     <string name="pref_restart_service">خاموش/روشن کردن سرویس</string>
     <string name="pref_right_cards">ستون راست</string>
     <string name="pref_right_cards_sum">کارت‌های کوچک، فقط در صفحه‌های عریض.</string>
+    <string name="pref_safe_mode">حالت امن</string>
+    <string name="pref_safe_mode_sum">سه کارت، بدون تصویر پس‌زمینه و سرویس پس‌زمینه؛ برای وقتی صفحه‌ی خانه بالا نمی‌آید</string>
     <string name="pref_seconds">نمایش ثانیه</string>
     <string name="pref_show_route">ترسیم مسیر</string>
     <string name="pref_show_route_sum">از سرویس مسیریابی عمومی می‌پرسد؛ اینترنت لازم دارد.</string>
@@ -257,6 +265,7 @@
     <string name="pref_wheel_play_sum">برای دستگاه‌هایی که سیاست دکمه‌ی رسانه ندارند لازم است.</string>
     <string name="pref_work_place">محل کار</string>
     <string name="pref_zoom">بزرگ‌نمایی پیش‌فرض</string>
+    <string name="safe_mode_retry">جای صفحه را لمس کنید تا در حالت امن دوباره بیاید. متن زیر در filesDir/crash.log هم هست.</string>
     <string name="search_here">موقعیت فعلی</string>
     <string name="search_hint">جست‌وجوی مکان…</string>
     <string name="search_hint_empty">دو حرف کافی است</string>

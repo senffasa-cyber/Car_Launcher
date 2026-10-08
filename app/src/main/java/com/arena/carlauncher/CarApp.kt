@@ -19,6 +19,7 @@ import com.arena.carlauncher.media.MediaHub
 import com.arena.carlauncher.services.LauncherService
 import com.arena.carlauncher.theme.DayNightController
 import com.arena.carlauncher.theme.Palette
+import com.arena.carlauncher.util.CrashLog
 import com.arena.carlauncher.util.ImageCache
 import com.arena.carlauncher.vehicle.TripComputer
 import com.arena.carlauncher.vehicle.VehicleHub
@@ -45,26 +46,43 @@ class CarApp : android.app.Application() {
     val mainHandler = Handler(Looper.getMainLooper())
 
     override fun onCreate() {
+        // Before anything that could throw: if a preference or a hub dies on this device, the reason has
+        // to survive into the next start (and into Settings → Debug) rather than vanish into logcat.
+        CrashLog.install(this)
         super.onCreate()
         instance = this
 
         prefs = LauncherPrefs.get(this)
-        DayNightController.install(this)
-        Palette.install(this, prefs)
-        ImageCache.install(this)
+        if (CrashLog.suggestedSafeMode && !prefs.safeMode) {
+            // Two failed boots in a row: start the next one minimal and say why, instead of crash-looping.
+            prefs.safeMode = true
+            CrashLog.note("auto safe mode after ${CrashLog.pendingStarts} unfinished starts")
+        }
+        boot("theme") { DayNightController.install(this) }
+        boot("palette") { Palette.install(this, prefs) }
+        boot("images") { ImageCache.install(this) }
 
         // Boot every hub; each one is lazy about permissions and silently degrades.
-        MediaHub.install(this)
-        LocationHub.install(this)
-        VehicleHub.install(this)
-        TripComputer.install(this)
-        WeatherRepository.install(this)
-        NavAppRepository.install(this)
-        MapEngine.install(this)
+        boot("media") { MediaHub.install(this) }
+        boot("location") { LocationHub.install(this) }
+        boot("vehicle") { VehicleHub.install(this) }
+        boot("trip") { TripComputer.install(this) }
+        boot("weather") { WeatherRepository.install(this) }
+        boot("navapps") { NavAppRepository.install(this) }
+        boot("map") { MapEngine.install(this) }
 
-        ensureChannels(this)
-        if (prefs.bootStart) {
-            LauncherService.start(this, "boot")
+        boot("channels") { ensureChannels(this) }
+        if (prefs.bootStart && !prefs.safeMode) {
+            boot("service") { LauncherService.start(this, "boot") }
+        }
+    }
+
+    /** One hub failing must not cost the whole launcher: record it, keep going, show the home screen. */
+    private inline fun boot(what: String, block: () -> Unit) {
+        try {
+            block()
+        } catch (t: Throwable) {
+            CrashLog.failure("$what install failed", t)
         }
     }
 

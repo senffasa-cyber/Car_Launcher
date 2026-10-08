@@ -30,6 +30,7 @@ import com.arena.carlauncher.theme.DayNightController
 import com.arena.carlauncher.theme.Palette
 import com.arena.carlauncher.ui.TimeTicker
 import com.arena.carlauncher.ui.Views
+import com.arena.carlauncher.util.CrashLog
 import com.arena.carlauncher.util.Format
 import com.arena.carlauncher.vehicle.VehicleHub
 import kotlinx.coroutines.CoroutineScope
@@ -56,6 +57,9 @@ class HomeActivity : androidx.appcompat.app.AppCompatActivity(),
 
     private lateinit var prefs: LauncherPrefs
     private lateinit var root: GestureLayout
+
+    /** False until `buildUi` has actually finished; every lifecycle hook that touches `root` checks it. */
+    private var uiReady = false
     private var wallpaper: ImageView? = null
     private var scrim: View? = null
     private var topBar: TopBar? = null
@@ -88,15 +92,68 @@ class HomeActivity : androidx.appcompat.app.AppCompatActivity(),
         super.onCreate(savedInstanceState)
         AppRepository.load()
         AppRepository.addChangeListener(appsListener)
-        buildUi()
+        // A card that throws must not become a launcher that will not open: buildUi is guarded, and the
+        // first failure retries once in safe mode (three cards, no wallpaper, no service).
+        if (!buildUiGuarded()) return
         ActionRouter.ui = this
-        LauncherService.start(this, "home")
+        if (!prefs.safeMode) LauncherService.start(this, "home")
         refreshWallpaper()
         applyWindowFlags()
         handleIntent(intent)
         CenterCardCoordinator.evaluate()
         scope.launch {
             CenterCardCoordinator.center.collect { onCenterChanged(it) }
+        }
+    }
+
+    /** @return false when the UI was not built — the caller stops setup, because the views do not exist. */
+    private fun buildUiGuarded(): Boolean {
+        return try {
+            buildUi()
+            uiReady = true
+            CrashLog.bootOk()
+            true
+        } catch (t: Throwable) {
+            CrashLog.failure("home build failed (safeMode=${prefs.safeMode})", t)
+            if (prefs.safeMode) {
+                showFatalFallback(t)
+            } else {
+                prefs.safeMode = true
+                CrashLog.note("retrying the boot with the minimal card set")
+                recreate()
+            }
+            false
+        }
+    }
+
+    /**
+     * Last resort: a readable screen instead of a crash loop. The stack trace is on it because on these
+     * units there is usually no logcat at hand, and tapping anywhere reboots into safe mode — which is
+     * how you get a home screen back when a single card is the thing that dies.
+     */
+    private fun showFatalFallback(t: Throwable) {
+        try {
+            val box = Views.column(this, paddingDp = 16)
+            val head = Views.multiline(this, getString(R.string.launcher_will_not_open), 15f, 4)
+            head.setTextColor(Palette.colors.onSurface)
+            val hint = Views.multiline(this, getString(R.string.safe_mode_retry), 12f, 3)
+            hint.setTextColor(Palette.colors.accent)
+            val trace = Views.multiline(this, Log.getStackTraceString(t), 10f, 500)
+            trace.setTextColor(Palette.colors.onSurfaceMuted)
+            box.addView(head)
+            box.addView(hint)
+            box.addView(Views.separator(this))
+            box.addView(trace)
+            val scroll = android.widget.ScrollView(this)
+            scroll.addView(box)
+            scroll.setOnClickListener {
+                prefs.safeMode = true
+                CrashLog.note("safe mode forced from the fallback screen")
+                recreate()
+            }
+            setContentView(scroll)
+        } catch (_: Throwable) {
+            // Nothing left to fall back to; the trace is already in filesDir/crash.log.
         }
     }
 
@@ -123,6 +180,9 @@ class HomeActivity : androidx.appcompat.app.AppCompatActivity(),
 
     override fun onStart() {
         super.onStart()
+        // The safe-mode fallback screen has no root view; touching `root` while it is showing is an
+        // UninitializedPropertyAccessException, which would replace a readable error with a crash loop.
+        if (!uiReady) return
         TimeTicker.register(driveTick, root)
         leftStrip?.bindAll()
         rightStrip?.bindAll()
@@ -130,6 +190,7 @@ class HomeActivity : androidx.appcompat.app.AppCompatActivity(),
 
     override fun onResume() {
         super.onResume()
+        if (!uiReady) return
         applyWindowFlags()
         refreshWallpaper()
         dock?.rebuild()
@@ -140,7 +201,7 @@ class HomeActivity : androidx.appcompat.app.AppCompatActivity(),
         // out of nowhere when the screen is off, and the ring intent would be missed. onResume is the one
         // moment we are guaranteed to be foreground, so the service is (re)started here and simply
         // idles otherwise.
-        if (prefs.callBanner) CallOverlayService.ensureRunning(this)
+        if (prefs.callBanner && !prefs.safeMode) CallOverlayService.ensureRunning(this)
     }
 
     override fun onPause() {
@@ -336,7 +397,7 @@ class HomeActivity : androidx.appcompat.app.AppCompatActivity(),
     private fun applyPalette() {
         val c = Palette.colors
         window.decorView.setBackgroundColor(c.background)
-        root.setBackgroundColor(c.background)
+        if (uiReady) root.setBackgroundColor(c.background)
         scrim?.setBackgroundColor(Format.withAlpha(Color.BLACK, prefs.wallpaperDim))
         topBar?.refresh()
         allApps?.repaint()
@@ -379,6 +440,13 @@ class HomeActivity : androidx.appcompat.app.AppCompatActivity(),
     private fun refreshWallpaper() {
         val uri = prefs.wallpaperUri
         val wp = wallpaper ?: return
+        if (prefs.safeMode) {
+            // A 12 MP wallpaper decode is exactly the kind of allocation that kills a 2.72 GB unit during
+            // boot, and it is the one piece of decoration safe mode exists to drop.
+            wp.setImageDrawable(null)
+            scrim?.setBackgroundColor(Format.withAlpha(Color.BLACK, 70))
+            return
+        }
         if (uri.isNullOrBlank()) {
             wp.setImageDrawable(null)
             scrim?.setBackgroundColor(Format.withAlpha(Color.BLACK, prefs.wallpaperDim))
