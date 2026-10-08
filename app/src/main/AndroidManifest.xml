@@ -88,7 +88,7 @@
     <application
         android:name=".CarApp"
         android:allowBackup="false"
-        android:appCategory="auto"
+        android:appCategory="productivity"
         tools:targetApi="o"
         android:hardwareAccelerated="true"
         android:icon="@drawable/ic_launcher"
