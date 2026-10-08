@@ -49,7 +49,7 @@ class AllAppsView(context: Context) : LinearLayout(context) {
     }
     private val title = Views.text(context, "", 13f, Palette.colors.accent, bold = true)
     private val grid = RecyclerView(context).apply {
-        hasFixedSize = true
+        setHasFixedSize(true)
         setItemViewCacheSize(24)
         overScrollMode = View.OVER_SCROLL_NEVER
         clipToPadding = false
@@ -231,5 +231,7 @@ class AllAppsView(context: Context) : LinearLayout(context) {
         }
     }
 
-    class Cell(val cell: View, val icon: ImageView, val label: android.widget.TextView)
+    /** A RecyclerView.ViewHolder over the three parts the binder touches — `Adapter<T>` requires it. */
+    class Cell(val cell: View, val icon: ImageView, val label: android.widget.TextView) :
+        RecyclerView.ViewHolder(cell)
 }

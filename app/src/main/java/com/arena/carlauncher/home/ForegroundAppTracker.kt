@@ -2,6 +2,8 @@ package com.arena.carlauncher.home
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityServiceInfoInfo
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings
@@ -41,7 +43,8 @@ class ForegroundAppTracker : AccessibilityService() {
         fun enabled(ctx: Context): Boolean = try {
             val am = ctx.getSystemService(Context.ACCESSIBILITY_SERVICE) as? android.view.accessibility.AccessibilityManager
             val mine = ctx.packageName
-            am?.enabledAccessibilityServiceList.orEmpty().any { it.packageName == mine }
+            am?.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+                .orEmpty().any { it.packageName == mine }
         } catch (_: Throwable) {
             false
         }

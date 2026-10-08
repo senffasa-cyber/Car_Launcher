@@ -410,6 +410,37 @@ def check_setters():
     return problems
 
 
+def check_layoutparams_receiver():
+    """`someLayout.addView(child, LinearLayout.LayoutParams(...).apply { Views.dp(this, 8f) })` is a trap.
+
+    Inside that `apply`, `this` is the LayoutParams, so any call that expects a Context fails to compile
+    (seven sites in PlaceSearchActivity did exactly this). The fix is to name the outer receiver
+    explicitly, which is what this rule enforces.
+    """
+    problems = []
+    open_lp = re.compile(r"\w*LayoutParams\([^)]*$|\w*LayoutParams\(.*\)\.apply\s*\{")
+    same = re.compile(r"\.apply\s*\{[^}]*\bViews\.dp\(this,")
+    for path in kotlin_files():
+        rel = os.path.relpath(path, ROOT)
+        lines = open(path, encoding="utf-8").read().split("\n")
+        for idx, line in enumerate(lines):
+            if same.search(line):
+                problems.append("%s:%d `this` inside a LayoutParams .apply is the LayoutParams: %s"
+                                % (rel, idx + 1, line.strip()[:100]))
+                continue
+            if open_lp.search(line.rstrip()) and ".apply" in line:
+                j = idx + 1
+                while j < min(len(lines), idx + 5):
+                    if "Views.dp(this," in lines[j]:
+                        problems.append("%s:%d `this` inside a LayoutParams .apply is the LayoutParams"
+                                        % (rel, j + 1))
+                        break
+                    if lines[j].strip().startswith("}"):
+                        break
+                    j += 1
+    return problems
+
+
 def check_gradle():
     problems = []
     path = os.path.join(ROOT, "app", "build.gradle")
@@ -434,6 +465,7 @@ def main():
         ("res xml", check_res_xml()),
         ("gradle", check_gradle()),
         ("setter hygiene", check_setters()),
+        ("layoutparams receiver", check_layoutparams_receiver()),
     ]
     total = 0
     for title, problems in sections:

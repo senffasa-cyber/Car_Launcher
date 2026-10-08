@@ -59,11 +59,12 @@ class CardPagerAdapter(
 
     /**
      * Applied by the host: keep every page alive instead of pooling it, so scrolling back is a repaint
-     * and not a re-inflate. `setMaxRecycledViews(0, 0)` plus a cache size >= page count does that.
+     * and not a re-inflate. ViewPager2 owns no pool of its own — the RecyclerView it wraps is its first
+     * child, and that is where `setMaxRecycledViews(0, 0)` has to go.
      */
     fun applyNoRecycle(pager: androidx.viewpager2.widget.ViewPager2) {
         try {
-            pager.recycledViewPool.setMaxRecycledViews(0, 0)
+            (pager.getChildAt(0) as? RecyclerView)?.recycledViewPool?.setMaxRecycledViews(0, 0)
             pager.offscreenPageLimit = ids.size.coerceAtMost(6)
             pager.isUserInputEnabled = true
         } catch (_: Throwable) {

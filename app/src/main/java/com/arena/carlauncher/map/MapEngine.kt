@@ -222,8 +222,10 @@ object MapEngine {
     fun debugDump(): String =
         "src=${source.id} mem=${mem.size()} pend=${pending.size} req=${requests.get()} hit=${hits.get()}/${misses.get()} disk=${disk?.bytes() ?: 0L}B"
 
+    /** Called from `onTrimMemory`: drop half the bitmaps rather than emptying the cache, so a
+     * low-memory warning does not turn every visible tile into a fresh network request. */
     fun trimMemory() {
-        mem.trimMemory()
+        mem.trimToSize(mem.maxSize() / 2)
     }
 }
 

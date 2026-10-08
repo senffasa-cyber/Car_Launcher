@@ -83,7 +83,10 @@ object ForegroundAppWatcher {
     }
 
     // ------------------------------------------------------------------ usage-stats feed
-    fun hasUsageAccess(ctx: Context): Boolean = try {
+    fun hasUsageAccess(ctx: Context): Boolean {
+        // Block body on purpose: the check has to bail out with `return false` when the service is
+        // missing, which an expression body forbids.
+        return try {
         val aom = ctx.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager ?: return false
         val op = try {
             AppOpsManager::class.java.getField("OPSTR_GET_USAGE_STATS").get(null) as String
@@ -93,9 +96,10 @@ object ForegroundAppWatcher {
         @Suppress("DEPRECATION")
         val res = aom.checkOpNoThrow(op, android.os.Process.myUid(), ctx.packageName)
         res == AppOpsManager.MODE_ALLOWED
-    } catch (_: Throwable) {
-        // Some head-unit ROMs hide AppOpsManager entirely; assume "unknown" and let the poll fail soft.
-        true
+        } catch (_: Throwable) {
+            // Some head-unit ROMs hide AppOpsManager entirely; assume "unknown" and let the poll fail soft.
+            true
+        }
     }
 
     fun openUsageAccessSettings(ctx: Context) {

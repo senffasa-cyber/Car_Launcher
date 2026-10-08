@@ -28,7 +28,7 @@ object NavAppRepository {
     private const val TAG = "NavAppRepository"
 
     /** Well-known ids, only used for nicer labels + the right deep-link template. */
-    val KNOWN = mapOf(
+    private val KNOWN = mapOf(
         "com.google.android.apps.maps" to Known("Google Maps", "google.navigation:q={lat},{lng}"),
         "org.rajman.neshan.traffic.tehran.navigator" to Known(
             "نشان | Neshan",
@@ -255,10 +255,12 @@ object NavAppRepository {
     }
 
     /** Component of the preferred nav app — used to open it from the dock. */
-    fun launchComponent(ctx: Context): ComponentName? = try {
+    fun launchComponent(ctx: Context): ComponentName? {
         val pkg = preferred()?.packageName ?: return null
-        ctx.packageManager.getLaunchIntentForPackage(pkg)?.component
-    } catch (_: Throwable) {
-        null
+        return try {
+            ctx.packageManager.getLaunchIntentForPackage(pkg)?.component
+        } catch (_: Throwable) {
+            null
+        }
     }
 }

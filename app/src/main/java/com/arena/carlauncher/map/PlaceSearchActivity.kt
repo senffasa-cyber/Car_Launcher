@@ -67,7 +67,7 @@ class PlaceSearchActivity : Activity() {
         val head = Views.row(this, paddingDp = 0).apply { gravity = Gravity.CENTER_VERTICAL }
         head.addView(
             Views.icon(this, R.drawable.ic_search, 20, Palette.colors.accent),
-            LinearLayout.LayoutParams(Views.dp(this, 20f), Views.dp(this, 20f))
+            LinearLayout.LayoutParams(Views.dp(this@PlaceSearchActivity, 20f), Views.dp(this@PlaceSearchActivity, 20f))
         )
         input = EditText(this).apply {
             hint = getString(R.string.search_hint)
@@ -85,13 +85,13 @@ class PlaceSearchActivity : Activity() {
             })
         }
         head.addView(input, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-            marginStart = Views.dp(this, 10f)
+            marginStart = Views.dp(this@PlaceSearchActivity, 10f)
         })
         head.addView(
             Views.iconButton(this, R.drawable.ic_close, 38, 18) { finish() },
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { marginStart = Views.dp(this, 8f) }
+            ).apply { marginStart = Views.dp(this@PlaceSearchActivity, 8f) }
         )
         root.addView(head, matchWrap())
 
@@ -106,22 +106,22 @@ class PlaceSearchActivity : Activity() {
             },
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { marginStart = Views.dp(this, 6f) })
+            ).apply { marginStart = Views.dp(this@PlaceSearchActivity, 6f) })
         actions.addView(
             chip(R.drawable.ic_work, getString(R.string.place_work)) {
                 PlacePicker.work(this)?.let { choose(it) } ?: Views.toast(this, R.string.place_not_set)
             },
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { marginStart = Views.dp(this, 6f) })
+            ).apply { marginStart = Views.dp(this@PlaceSearchActivity, 6f) })
         root.addView(actions, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { topMargin = Views.dp(this, 8f) })
+        ).apply { topMargin = Views.dp(this@PlaceSearchActivity, 8f) })
 
         status = Views.text(this, "", 11.5f, Palette.colors.onSurfaceMuted).apply { gravity = Gravity.CENTER }
         root.addView(status, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { topMargin = Views.dp(this, 6f) })
+        ).apply { topMargin = Views.dp(this@PlaceSearchActivity, 6f) })
 
         list = RecyclerView(this).apply {
             layoutManager = LinearLayoutManager(this@PlaceSearchActivity)
@@ -130,7 +130,7 @@ class PlaceSearchActivity : Activity() {
         }
         list.adapter = Rows()
         root.addView(list, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f).apply {
-            topMargin = Views.dp(this, 6f)
+            topMargin = Views.dp(this@PlaceSearchActivity, 6f)
         })
         setContentView(root)
         renderRecents()

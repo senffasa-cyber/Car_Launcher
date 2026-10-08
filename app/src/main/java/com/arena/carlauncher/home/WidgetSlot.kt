@@ -156,9 +156,16 @@ object WidgetSlot {
         if (id == AppWidgetManager.INVALID_APPWIDGET_ID) return
         val h = ensureHost(ctx) ?: return
         val provider = providerComponent(ctx) ?: return
+        // AppWidgetHost.createView wants the *info*, not the component: the host re-resolves the
+        // provider through it (options, min/max size, configure activity).
+        val info = try {
+            h.getAppWidgetInfo(id) ?: AppWidgetManager.getInstance(ctx).getAppWidgetInfo(provider)
+        } catch (_: Throwable) {
+            null
+        } ?: return
         if (view == null) {
             view = try {
-                h.createView(id, provider).also { v ->
+                h.createView(ctx, id, info).also { v ->
                     val opts = Bundle().apply {
                         putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 300)
                         putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH, 560)

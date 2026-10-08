@@ -101,8 +101,9 @@ jobs:
       # /repos/<repo>/check-runs/<job>/annotations` then shows exactly what broke.
       - name: Assemble debug APK
         run: |
+          # emit <regex> <count> <skip> -> one annotation-safe blob (newlines as %0A, % escaped first)
           emit() {
-            grep -E "$1" /tmp/dbg.log | head -n "$2" \
+            grep -E "$1" /tmp/dbg.log | tail -n "+$(( ${3:-0} + 1 ))" | head -n "${2:-40}" \
               | sed 's|/home/runner/work/[^/]*/[^/]*/||g' \
               | awk 'BEGIN{ORS=""} {gsub(/%/, "%25"); if (NR > 1) printf "%s", "%0A"; print}'
           }
@@ -112,9 +113,16 @@ jobs:
           set -e
           tail -30 /tmp/dbg.log
           if [ $rc -ne 0 ]; then
-            echo "error count: $(grep -cE '^e: file://' /tmp/dbg.log)"
-            echo "::error title=Kotlin errors (first 40)::$(emit '^e: file://' 40)"
-            echo "::error title=Gradle failure::$(emit 'FAILURE:|What went wrong|Execution failed|Caused by' 25)"
+            total=$(grep -cE '^e: file://' /tmp/dbg.log)
+            echo "kotlin error count: $total"
+            echo "::error title=Kotlin errors 1-45 of $total::$(emit '^e: file://' 45 0)"
+            if [ "$total" -gt 45 ]; then
+              echo "::error title=Kotlin errors 46-90 of $total::$(emit '^e: file://' 45 45)"
+            fi
+            if [ "$total" -gt 90 ]; then
+              echo "::error title=Kotlin errors 91-135 of $total::$(emit '^e: file://' 45 90)"
+            fi
+            echo "::error title=Gradle failure::$(emit 'FAILURE:|What went wrong|Execution failed|Caused by' 25 0)"
             exit $rc
           fi
           echo "debug ok: $(find app/build/outputs/apk -name '*.apk' | head -1)"
