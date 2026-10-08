@@ -135,12 +135,12 @@ class MapCard(context: Context, full: Boolean) : BaseCard(context, Cards.MAP, fu
             if (map.headingUp) R.drawable.ic_compass else R.drawable.ic_north,
             size, if (full) 18 else 15
         ) {
-            map.setHeadingUp(!map.headingUp)
+            map.headingUp = !map.headingUp
         }
         // The icon swap is a listener set *after* construction: `northButton` cannot be named inside its
         // own initialiser, and that is exactly what a click lambda passed to the factory would be.
         northButton.setOnClickListener {
-            map.setHeadingUp(!map.headingUp)
+            map.headingUp = !map.headingUp
             northButton.setImageResource(if (map.headingUp) R.drawable.ic_compass else R.drawable.ic_north)
         }
         col.addView(northButton, margin())

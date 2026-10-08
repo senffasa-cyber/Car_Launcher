@@ -51,6 +51,16 @@ class TileMapView @JvmOverloads constructor(
     var rotationDeg = 0f
     var bearingDeg = 0f
     var headingUp = true
+        // Persistence and the north-up reset live in the setter: a `setHeadingUp(on)` helper would clash
+        // with the JVM signature the property already generates, which is a compile error rather than a
+        // style choice. `headingUp = false` therefore *is* the whole operation.
+        set(value) {
+            if (field == value) return
+            field = value
+            LauncherPrefs.get(context).mapHeadingUp = value
+            if (!value) rotationDeg = 0f
+            invalidate()
+        }
     var follow = true
     var showAccuracy = true
     var autoZoomBySpeed = true
@@ -190,13 +200,6 @@ class TileMapView @JvmOverloads constructor(
                 invalidate()
             }
         }
-    }
-
-    fun setHeadingUp(on: Boolean) {
-        headingUp = on
-        LauncherPrefs.get(context).mapHeadingUp = on
-        if (!on) rotationDeg = 0f
-        invalidate()
     }
 
     private fun normalize(d: Float): Float {
