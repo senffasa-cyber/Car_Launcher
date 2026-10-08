@@ -64,21 +64,26 @@ class LauncherService : LifecycleService() {
     override fun onCreate() {
         super.onCreate()
         CarApp.ensureChannels(this)
-        try {
-            CarApp.startForegroundCompat(this, CarApp.NOTIF_SERVICE, CarApp.serviceNotification(this, ""))
-        } catch (t: Throwable) {
-            // Android 12+ can refuse a foreground start from a receiver; the launcher UI still works.
-            Log.w(TAG, "startForeground refused: ${t.message}")
+        // startForegroundCompat never throws and always lands a foreground state; the boolean is only
+        // about whether we get to *keep* running here (see its doc for the uncatchable system kill).
+        if (!CarApp.startForegroundCompat(this, CarApp.NOTIF_SERVICE, CarApp.serviceNotification(this, ""))) {
+            Log.w(TAG, "foreground refused; service stopping")
+            return
         }
-        MediaHub.install(this)
-        LocationHub.install(this)
-        VehicleHub.install(this)
-        ForegroundAppWatcher.install(this)
+        try {
+            MediaHub.install(this)
+            LocationHub.install(this)
+            VehicleHub.install(this)
+            ForegroundAppWatcher.install(this)
 
-        MediaHub.startTracking()
-        LocationHub.start()
-        VehicleHub.start()
-        ForegroundAppWatcher.start()
+            MediaHub.startTracking()
+            LocationHub.start()
+            VehicleHub.start()
+            ForegroundAppWatcher.start()
+        } catch (t: Throwable) {
+            // The notification is already up; a hub that dies here must not take the home screen with it.
+            com.arena.carlauncher.util.CrashLog.failure("service hubs failed", t)
+        }
 
         try {
             registerReceiver(screenReceiver, IntentFilter().apply {

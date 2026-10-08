@@ -342,6 +342,8 @@ S = [
     ("pref_crash_report", "Crash report", "گزارش کرش"),
     ("pref_crash_report_sum", "What killed the last boots, read from this device", "چه چیزی بوت‌های اخیر را روی همین دستگاه کشت"),
     ("crash_none", "No crash recorded. If the launcher still will not open, the problem is not a Java exception: check that the app is allowed to be the default home.", "هیچ کرشی ثبت نشده. اگر باز هم لانچر بالا نیامد، مشکل استثنا نیست: ببینید اجازه دارد پیش‌فرض خانه باشد."),
+    ("crash_seen_title", "The last start crashed before the home screen was built", "اجرای قبلی قبل از ساخت صفحه‌ی خانه کرش کرد"),
+    ("crash_seen_safe", "Restart in safe mode", "بوت دوباره در حالت امن"),
     ("crash_clear", "Clear the crash log", "پاک‌کردن گزارش کرش"),
     ("crash_cleared", "Crash log cleared", "گزارش کرش پاک شد"),
     ("pref_safe_mode", "Safe mode", "حالت امن"),

@@ -64,6 +64,11 @@ class LauncherPrefs private constructor(private val sp: SharedPreferences) {
         get() = sp.getBoolean(K_SAFE_MODE, false)
         set(v) = put(K_SAFE_MODE, v)
 
+    /** One runtime prompt per install, so a denied dialog does not turn into a nag. */
+    var locationAsked: Boolean
+        get() = sp.getBoolean(K_LOCATION_ASKED, false)
+        set(v) = put(K_LOCATION_ASKED, v)
+
     var centerCards: List<String>
         get() = if (safeMode) SAFE_CARDS else csv(K_CENTER_CARDS, DEFAULT_CENTER)
         set(v) = putCsv(K_CENTER_CARDS, v)
@@ -540,6 +545,7 @@ class LauncherPrefs private constructor(private val sp: SharedPreferences) {
         private const val K_DEBUG = "debug_log"
         private const val K_CALL_BANNER = "call_banner"
         private const val K_SAFE_MODE = "safe_mode"
+        private const val K_LOCATION_ASKED = "location_asked"
 
         @Volatile
         private var instance: LauncherPrefs? = null

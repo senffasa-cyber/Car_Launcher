@@ -41,6 +41,8 @@
     <string name="crash_clear">پاک‌کردن گزارش کرش</string>
     <string name="crash_cleared">گزارش کرش پاک شد</string>
     <string name="crash_none">هیچ کرشی ثبت نشده. اگر باز هم لانچر بالا نیامد، مشکل استثنا نیست: ببینید اجازه دارد پیش‌فرض خانه باشد.</string>
+    <string name="crash_seen_safe">بوت دوباره در حالت امن</string>
+    <string name="crash_seen_title">اجرای قبلی قبل از ساخت صفحه‌ی خانه کرش کرد</string>
     <string name="day_today">امروز</string>
     <string name="day_tomorrow">فردا</string>
     <string name="debug_dump_shown">از پنجره کپی کنید</string>

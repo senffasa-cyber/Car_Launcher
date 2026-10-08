@@ -17,8 +17,8 @@ import java.io.FileOutputStream
  * starts. Two starts that never reached a finished home screen and [suggestedSafeMode] flips on for
  * the next one — a launcher with three cards is better than a launcher that will not open.
  *
- * Settings → Debug shows this file verbatim (`LogSheet`), which is what turns "it doesn't run" into a
- * line number someone can act on.
+ * Settings → Debug shows this file verbatim (`LogSheet`), and `HomeActivity` offers it on the *next*
+ * successful boot — a user with no PC cannot be expected to go hunting for it.
  */
 object CrashLog {
 
@@ -42,7 +42,14 @@ object CrashLog {
         private set
 
     fun install(app: Application) {
-        dir = app.filesDir
+        // The app-specific *external* dir on purpose: `filesDir` needs root or `run-as`, and the people
+        // who need this file most are sitting in a car with no PC — any file manager opens
+        // Android/data/<pkg>/files/crash.log. Internal storage is the fallback, not the plan.
+        dir = try {
+            app.getExternalFilesDir(null) ?: app.filesDir
+        } catch (_: Throwable) {
+            app.filesDir
+        }
         startedAt = SystemClock.elapsedRealtime()
         pendingStarts = readBoot() + 1
         suggestedSafeMode = readBoot() >= 2

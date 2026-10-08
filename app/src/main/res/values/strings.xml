@@ -41,6 +41,8 @@
     <string name="crash_clear">Clear the crash log</string>
     <string name="crash_cleared">Crash log cleared</string>
     <string name="crash_none">No crash recorded. If the launcher still will not open, the problem is not a Java exception: check that the app is allowed to be the default home.</string>
+    <string name="crash_seen_safe">Restart in safe mode</string>
+    <string name="crash_seen_title">The last start crashed before the home screen was built</string>
     <string name="day_today">Today</string>
     <string name="day_tomorrow">Tomorrow</string>
     <string name="debug_dump_shown">Copy it from the sheet</string>

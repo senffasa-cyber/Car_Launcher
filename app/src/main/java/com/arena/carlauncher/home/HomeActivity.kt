@@ -22,6 +22,7 @@ import com.arena.carlauncher.actions.ActionRouter
 import com.arena.carlauncher.data.AppRepository
 import com.arena.carlauncher.data.Cards
 import com.arena.carlauncher.data.LauncherPrefs
+import com.arena.carlauncher.loc.LocationHub
 import com.arena.carlauncher.media.MediaHub
 import com.arena.carlauncher.services.CallOverlayService
 import com.arena.carlauncher.services.LauncherService
@@ -60,6 +61,9 @@ class HomeActivity : androidx.appcompat.app.AppCompatActivity(),
 
     /** False until `buildUi` has actually finished; every lifecycle hook that touches `root` checks it. */
     private var uiReady = false
+
+    /** The boot before this one died mid-build — worth telling the user about, once. */
+    private var badPriorBoot = false
     private var wallpaper: ImageView? = null
     private var scrim: View? = null
     private var topBar: TopBar? = null
@@ -97,6 +101,8 @@ class HomeActivity : androidx.appcompat.app.AppCompatActivity(),
         if (!buildUiGuarded()) return
         ActionRouter.ui = this
         if (!prefs.safeMode) LauncherService.start(this, "home")
+        maybeAskLocation()
+        if (badPriorBoot) showCrashNotice()
         refreshWallpaper()
         applyWindowFlags()
         handleIntent(intent)
@@ -111,6 +117,7 @@ class HomeActivity : androidx.appcompat.app.AppCompatActivity(),
         return try {
             buildUi()
             uiReady = true
+            badPriorBoot = CrashLog.pendingStarts >= 2
             CrashLog.bootOk()
             true
         } catch (t: Throwable) {
@@ -154,6 +161,51 @@ class HomeActivity : androidx.appcompat.app.AppCompatActivity(),
             setContentView(scroll)
         } catch (_: Throwable) {
             // Nothing left to fall back to; the trace is already in filesDir/crash.log.
+        }
+    }
+
+    /**
+     * Ask for location once, on the first run that needs it.
+     *
+     * Not for the speedometer — for survival. The foreground service declares a `location` type, and on
+     * API 29+ claiming that type without the grant throws, which is how a freshly installed launcher
+     * ends up killed by the system before it paints anything (the real bug this prompt prevents). If the
+     * ROM swallows the dialog — some do, for HOME apps — the service simply runs untyped and the
+     * speedometer shows `--` until the permission is granted from Settings.
+     */
+    private fun maybeAskLocation() {
+        if (prefs.locationAsked || Build.VERSION.SDK_INT < 23 || LocationHub.hasPermission(this)) return
+        prefs.locationAsked = true
+        try {
+            androidx.core.app.ActivityCompat.requestPermissions(
+                this,
+                arrayOf(
+                    android.Manifest.permission.ACCESS_FINE_LOCATION,
+                    android.Manifest.permission.ACCESS_COARSE_LOCATION
+                ),
+                REQ_LOCATION
+            )
+        } catch (t: Throwable) {
+            CrashLog.note("permission prompt refused: ${t.javaClass.simpleName}: ${t.message}")
+        }
+    }
+
+    /** The previous run crashed while building the home screen; show what it recorded, and offer safe mode. */
+    private fun showCrashNotice() {
+        val body = CrashLog.recent()
+        if (body.isBlank()) return
+        try {
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle(R.string.crash_seen_title)
+                .setMessage(body.take(2400))
+                .setNegativeButton(R.string.ok, null)
+                .setPositiveButton(R.string.crash_seen_safe) { _, _ ->
+                    prefs.safeMode = true
+                    recreate()
+                }
+                .show()
+        } catch (t: Throwable) {
+            CrashLog.note("crash notice refused: ${t.message}")
         }
     }
 
@@ -728,5 +780,8 @@ class HomeActivity : androidx.appcompat.app.AppCompatActivity(),
     companion object {
         private const val TAG = "Home"
         private const val REQ_WIDGET = 4417
+
+        /** `ActivityCompat.requestPermissions` needs a request code of its own. */
+        private const val REQ_LOCATION = 41
     }
 }

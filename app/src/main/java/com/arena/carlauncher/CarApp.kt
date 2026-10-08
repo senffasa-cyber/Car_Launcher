@@ -163,14 +163,38 @@ class CarApp : android.app.Application() {
         }
 
         /**
-         * `startForeground(id, notification, type)` only exists on API 29+, and the
-         * `location` type is mandatory from there on when the manifest declares it.
+         * `startForeground(id, notification, type)` only exists on API 29+, and the `location` type is
+         * mandatory from there on when the manifest declares it — *if the permission behind it exists*.
+         *
+         * Passing that type before the runtime grant lands throws `SecurityException`, and a service
+         * started with `startForegroundService()` that never gets into the foreground is killed five
+         * seconds later by an **uncatchable** `RemoteServiceException`. On a fresh install that is the
+         * whole story of «the APK installs but the launcher will not open»: nothing is painted, and the
+         * second attempt shows the force-close dialog. So the type is claimed only when location is
+         * actually granted, and some `startForeground` call always lands.
+         *
+         * @return false only when even the untyped call failed; the service is stopped in that case so
+         * it cannot linger in the background of a 2.72 GB unit.
          */
-        fun startForegroundCompat(service: Service, id: Int, notification: Notification) {
-            if (Build.VERSION.SDK_INT >= 29) {
-                service.startForeground(id, notification, FGS_TYPE)
-            } else {
+        fun startForegroundCompat(service: Service, id: Int, notification: Notification): Boolean {
+            if (Build.VERSION.SDK_INT >= 29 && LocationHub.hasPermission(service)) {
+                try {
+                    service.startForeground(id, notification, FGS_TYPE)
+                    return true
+                } catch (t: Throwable) {
+                    CrashLog.note("typed startForeground refused: ${t.javaClass.simpleName}: ${t.message}")
+                }
+            }
+            return try {
                 service.startForeground(id, notification)
+                true
+            } catch (t: Throwable) {
+                CrashLog.failure("startForeground refused", t)
+                try {
+                    service.stopSelf()
+                } catch (_: Throwable) {
+                }
+                false
             }
         }
 
