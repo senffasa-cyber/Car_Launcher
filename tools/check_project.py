@@ -578,6 +578,36 @@ def check_jvm_signature_clashes():
     return problems
 
 
+def check_return_in_expression_body():
+    """`fun x(): Int = try { … return 0 … }` does not compile, and it is easy to write after a block body.
+
+    Kotlin only allows `return` inside a `{ … }` function body, so an early bail written in the
+    `?: return` style inside an expression body is an error ("Returns are not allowed for functions with
+    expression body"). This bit `CrashLog.readBoot` — written correctly the first time, broken by the
+    one-line refactor into `= try { … }`.
+    """
+    problems = []
+    opener = re.compile(r"^\s*(?:(?:private|internal|public|protected|open|override|final|inline|suspend)\s+)*fun\s+[\w`.]+[^=\n]*\)=?\s*(?:\w+\s*:\s*)?\S.*=\s*(?:try|run|with|when|if)\b")
+    any_expr = re.compile(r"^\s*(?:(?:private|internal|public|protected|open|override|final|inline|suspend)\s+)*fun\s+[\w`.]+[^{\n]*\)\s*(?::\s*[\w.<>, ?\[\]]+)?\s*=\s*\S")
+    for path in kotlin_files():
+        rel = os.path.relpath(path, ROOT)
+        raw = open(path, encoding="utf-8").read().split("\n")
+        code = strip_code("\n".join(raw)).split("\n")
+        for idx, line in enumerate(code):
+            if not any_expr.match(line) or "{" not in line:
+                continue
+            depth = line.count("{") - line.count("}")
+            j = idx
+            while depth > 0 and j + 1 < len(code):
+                j += 1
+                depth += code[j].count("{") - code[j].count("}")
+                if re.search(r"\breturn\b", code[j]):
+                    problems.append("%s:%d `return` inside an expression body (Kotlin needs a block body): %s"
+                                    % (rel, j + 1, raw[j].strip()[:90]))
+                    break
+    return problems
+
+
 def check_gradle():
     problems = []
     path = os.path.join(ROOT, "app", "build.gradle")
@@ -606,6 +636,7 @@ def main():
         ("member shapes", check_member_shapes()),
         ("apply shadowing", check_apply_shadowing()),
         ("jvm signature clashes", check_jvm_signature_clashes()),
+        ("return in expression body", check_return_in_expression_body()),
     ]
     total = 0
     for title, problems in sections:

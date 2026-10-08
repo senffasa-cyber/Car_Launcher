@@ -92,12 +92,15 @@ object CrashLog {
         }
     }
 
-    private fun readBoot(): Int = try {
+    private fun readBoot(): Int {
+        // Block body on purpose: a `return` inside `= try { … }` is not a statement, and Kotlin refuses it.
         val d = dir ?: return 0
-        val f = File(d, BOOT_FILE)
-        if (f.exists()) f.readText().trim().toIntOrNull() ?: 0 else 0
-    } catch (_: Throwable) {
-        0
+        return try {
+            val f = File(d, BOOT_FILE)
+            if (f.exists()) f.readText().trim().toIntOrNull() ?: 0 else 0
+        } catch (_: Throwable) {
+            0
+        }
     }
 
     private fun writeBoot(value: Int) {
