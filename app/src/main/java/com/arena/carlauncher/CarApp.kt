@@ -77,11 +77,11 @@ class CarApp : android.app.Application() {
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
         val critical = level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW
-        ImageCache.trim()
+        ImageCache.get(this).let { if (critical) it.evictAll() else it.trim() }
         MapEngine.trimMemory()
-        // Under real pressure the decoded-icon reuse pool is the next thing to relax; nothing is
-        // `System.gc()`-ed — that only costs a frame and buys a few kilobytes.
-        if (critical) ImageCache.trim()
+        // Icons are empty()d under real pressure because they re-decode from PackageManager without a
+        // network round trip; tiles only halve for the same reason in reverse. Nothing is `System.gc()`-ed
+        // — that costs a frame and buys kilobytes.
     }
 
     override fun onTerminate() {

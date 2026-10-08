@@ -160,7 +160,9 @@ object WidgetSlot {
         // provider through it (options, min/max size, configure activity).
         val awm = AppWidgetManager.getInstance(ctx)
         val info = try {
-            awm.getAppWidgetInfo(id) ?: awm.getAppWidgetInfo(provider)
+            // getAppWidgetInfo takes an id; a provider is resolved through getAppWidgetIds first.
+            awm.getAppWidgetInfo(id)
+                ?: awm.getAppWidgetIds(provider).firstOrNull()?.let { awm.getAppWidgetInfo(it) }
         } catch (_: Throwable) {
             null
         } ?: return
