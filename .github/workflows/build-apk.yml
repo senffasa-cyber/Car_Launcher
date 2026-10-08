@@ -1,0 +1,136 @@
+name: Build APK
+
+# What this is for
+#
+# The launcher was written in an environment with no JDK, no Android SDK and no network to Maven, so it
+# was never compiled. This workflow is the first real compile: it builds both APKs on a GitHub runner and
+# uploads them as artifacts, so a build can be installed on the head unit without setting up Android Studio.
+#
+# The debug APK is the reliable one (no R8). The release APK additionally runs minification + resource
+# shrinking, which is the step most likely to need proguard rules on a project this view-heavy, so it is
+# built in its own step and a failure there does not hide the debug artifact.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GRADLE_VERSION: "8.2"
+  JDK_VERSION: "17"
+
+jobs:
+  apk:
+    name: Gradle ${{ env.GRADLE_VERSION }} / JDK ${{ env.JDK_VERSION }} / SDK 34
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JDK_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JDK_VERSION }}
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install platform + build-tools
+        run: sdkmanager --install "platforms;android-34" "build-tools;34.0.0" "platform-tools"
+
+      # app/build.gradle signs `release` with ~/.android/debug.keystore so that sideloading works without
+      # any secrets; the runner has no such file, so make one. Replace it with CAR_LAUNCHER_KEYSTORE
+      # (repo secret, base64) for anything you distribute.
+      - name: Create a debug keystore for the release signature
+        run: |
+          mkdir -p "$HOME/.android"
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" \
+              -storepass android -keypass android -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+      - name: Set up Gradle ${{ env.GRADLE_VERSION }}
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: ${{ env.GRADLE_VERSION }}
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      # The repository ships gradle-wrapper.properties but no gradle-wrapper.jar (binary blobs in git are
+      # a review hazard), so generate it here rather than committing it.
+      - name: Generate the Gradle wrapper
+        run: gradle --no-daemon wrapper --gradle-version "$GRADLE_VERSION" --distribution-type bin
+
+      - name: Static self-checks (fast, no toolchain needed)
+        run: |
+          python3 tools/gen_icons.py
+          python3 tools/gen_strings.py
+          python3 tools/check_project.py
+          python3 tools/check_members.py
+          python3 tools/check_docs.py
+          python3 tools/validate_jalali.py --quick
+          git diff --exit-code app/src/main/res || {
+            echo "::error::generated resources are out of date; run tools/gen_strings.py + gen_icons.py and commit"; git status --short; exit 1; }
+
+      - name: Assemble debug APK
+        run: ./gradlew --no-daemon --stacktrace --console=plain assembleDebug
+
+      - name: Assemble release APK (R8 + resource shrinking)
+        if: always()
+        continue-on-error: true
+        run: ./gradlew --no-daemon --stacktrace --console=plain assembleRelease
+
+      - name: Lint report (non-blocking)
+        if: always()
+        continue-on-error: true
+        run: ./gradlew --no-daemon --console=plain lintDebug
+
+      - name: Collect APKs
+        if: always()
+        run: |
+          mkdir -p out
+          for f in $(find app/build/outputs/apk -name '*.apk' 2>/dev/null); do
+            variant=$(basename "$(dirname "$(dirname "$f")")")
+            cp "$f" "out/carlauncher-$variant.apk"
+          done
+          ls -la out
+          if [ -z "$(ls -A out 2>/dev/null)" ]; then echo "no APK produced"; exit 1; fi
+
+      - name: Upload APKs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: carlauncher-apk
+          path: out/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload build reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-reports
+          path: |
+            app/build/reports
+            app/build/outputs/logs
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Where to find the APK
+        if: always()
+        run: |
+          echo "### Artifacts" >> "$GITHUB_STEP_SUMMARY"
+          echo "Download *carlauncher-apk* from this run's **Summary** page (Actions → this run → Artifacts)." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo 'Install: `adb install -r -g carlauncher-debug.apk` — see docs/build-install.md for the permission grants.' >> "$GITHUB_STEP_SUMMARY"
