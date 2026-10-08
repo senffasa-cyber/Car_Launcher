@@ -1,0 +1,233 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- ============ required ============ -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <!-- Continuous speed / trip / nav auto-switch while another app is on top. -->
+    <uses-permission
+        android:name="android.permission.ACCESS_BACKGROUND_LOCATION"
+        tools:ignore="BackgroundLoc" />
+    <!-- Media mirroring: getActiveSessions() requires an enabled NotificationListenerService. -->
+    <uses-permission android:name="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+        tools:ignore="ProtectedPermissions" />
+    <!-- Traffic-aware card switching (grant with adb: pm grant … PACKAGE_USAGE_STATS is an appop). -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+    <!-- Status-bar shade from the swipe gesture / `notifications` action. There is no permission
+         needed to *open* it on a normal phone, but several head-unit firmwares drop the call silently
+         without this line; it costs nothing. -->
+    <uses-permission android:name="android.permission.EXPAND_STATUS_BAR" />
+    <!-- Brightness control from the quick tiles. -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
+
+    <!-- ============ optional (features degrade gracefully when ungranted) ============ -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
+    <!-- Only honoured when the APK is installed as a privileged/system app (screen-off tile). -->
+    <uses-permission
+        android:name="android.permission.DEVICE_POWER"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission
+        android:name="android.permission.CAR_SPEED"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission
+        android:name="android.permission.CAR_CLIMATE"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission
+        android:name="android.permission.CAR_BODY"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission
+        android:name="android.permission.CAR_FUEL"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.car.permission.CAR_SPEED" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.car.permission.CAR_CLIMATE" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.car.permission.CAR_POWERTRAIN" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.car.permission.CAR_VENDOR_EXTENSION" tools:ignore="ProtectedPermissions" />
+
+    <uses-feature
+        android:name="android.hardware.location.gps"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.telephony"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.bluetooth"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.usb.host"
+        android:required="false" />
+
+    <supports-screens
+        android:anyDensity="true"
+        android:largeScreens="true"
+        android:normalScreens="true"
+        android:smallScreens="true"
+        android:xlargeScreens="true" />
+
+    <application
+        android:name=".CarApp"
+        android:allowBackup="false"
+        android:appCategory="productivity"
+        tools:targetApi="o"
+        android:hardwareAccelerated="true"
+        android:icon="@drawable/ic_launcher"
+        android:label="@string/app_name"
+        android:largeHeap="true"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.CarLauncher"
+        tools:ignore="UnusedAttribute">
+
+        <!-- ================= Home (the launcher itself) ================= -->
+        <activity
+            android:name=".home.HomeActivity"
+            android:clearTaskOnLaunch="true"
+            android:configChanges="keyboard|keyboardHidden|navigation|screenSize|smallestScreenSize|screenLayout|orientation|uiMode|density|fontScale|locale|layoutDirection"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:resizeableActivity="true"
+            android:screenOrientation="landscape"
+            android:stateNotNeeded="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- The LAUNCHER category above already gives the unit's app list a second entry point
+                 while this app is not yet the default home. -->
+        </activity>
+
+        <!-- ================= Settings / first run ================= -->
+        <activity
+            android:name=".settings.SettingsActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|uiMode|density|locale|layoutDirection|fontScale"
+            android:exported="false"
+            android:label="@string/title_settings"
+            android:theme="@style/Theme.CarLauncher.Settings" />
+
+        <activity
+            android:name=".onboarding.OnboardingActivity"
+            android:configChanges="orientation|screenSize|uiMode|density|locale|layoutDirection|fontScale"
+            android:exported="false"
+            android:label="@string/title_onboarding"
+            android:theme="@style/Theme.CarLauncher.Onboarding" />
+
+        <activity
+            android:name=".settings.AppPickerActivity"
+            android:configChanges="orientation|screenSize|uiMode|density|locale|layoutDirection|fontScale"
+            android:exported="false"
+            android:label="@string/title_app_picker"
+            android:theme="@style/Theme.CarLauncher.Settings" />
+
+        <activity
+            android:name=".map.PlaceSearchActivity"
+            android:configChanges="orientation|screenSize|uiMode|density|locale|layoutDirection|fontScale"
+            android:exported="false"
+            android:label="@string/title_place_search"
+            android:theme="@style/Theme.CarLauncher.Settings"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- Deep links so other apps ( steering-wheel remappers, tasker, voice) can drive cards. -->
+        <activity-alias
+            android:name=".Card"
+            android:exported="true"
+            android:targetActivity=".home.HomeActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data
+                    android:host="card"
+                    android:scheme="arenacar" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- ================= Background services ================= -->
+        <service
+            android:name=".services.LauncherService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="location|mediaPlayback" />
+
+        <service
+            android:name=".services.CallOverlayService"
+            android:enabled="true"
+            android:exported="false" />
+
+        <service
+            android:name=".media.MediaNotificationListener"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.notification.default_filter_types"
+                android:value="conversations|alerting" />
+        </service>
+
+        <service
+            android:name=".home.ForegroundAppTracker"
+            android:exported="true"
+            android:label="@string/acc_label_foreground_tracker"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_foreground" />
+        </service>
+
+        <!-- ================= Receivers ================= -->
+        <receiver
+            android:name=".receivers.BootReceiver"
+            android:directBootAware="false"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.arena.carlauncher.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+    </application>
+
+</manifest>

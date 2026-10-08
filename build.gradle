@@ -1,0 +1,10 @@
+// Top-level build file — Arena Car Launcher
+// AGP 8.1.4 + Gradle 8.2 + Kotlin 1.9.22 (needs JDK 17; Android Studio Iguana/Jellyfish ships it)
+plugins {
+    id 'com.android.application' version '8.1.4' apply false
+    id 'org.jetbrains.kotlin.android' version '1.9.22' apply false
+}
+
+tasks.register('clean', Delete) {
+    delete rootProject.buildDir
+}

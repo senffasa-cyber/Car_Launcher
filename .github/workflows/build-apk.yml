@@ -1,0 +1,215 @@
+name: Build APK
+
+# What this is for
+#
+# The launcher was written in an environment with no JDK, no Android SDK and no network to Maven, so it
+# was never compiled. This workflow is the first real compile: it builds both APKs on a GitHub runner and
+# uploads them as artifacts, so a build can be installed on the head unit without setting up Android Studio.
+#
+# The debug APK is the reliable one (no R8). The release APK additionally runs minification + resource
+# shrinking, which is the step most likely to need proguard rules on a project this view-heavy, so it is
+# built in its own step and a failure there does not hide the debug artifact.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GRADLE_VERSION: "8.2"
+  JDK_VERSION: "17"
+
+jobs:
+  apk:
+    name: Gradle 8.2 / JDK 17 / SDK 34
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    # `contents: write` is here for one step only (Publish GitHub Release, which runs on `v*` tags);
+    # everything else in this job is read-only. Declared at job level because the runner image and the
+    # gradle cache need `contents: read` too, and write ⊇ read — a step-level grant would work as well
+    # only while the job leaves permissions unset.
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # The ubuntu-latest image already ships an Android SDK, and installing a second one through
+      # android-actions/setup-android costs a minute and can break on image updates. Use what is there,
+      # and only call sdkmanager if the exact platform AGP wants is missing.
+      - name: Point the build at the Android SDK
+        run: |
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          echo "sdk.dir=$SDK" > local.properties
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "--- SDK contents:"; ls "$SDK" || { echo "no SDK at $SDK"; exit 1; }
+          echo "--- platforms:"; ls "$SDK/platforms" 2>/dev/null || true
+          if [ ! -d "$SDK/platforms/android-34" ]; then
+            MGR="$SDK/cmdline-tools/latest/bin/sdkmanager"
+            [ -x "$MGR" ] || MGR="$(command -v sdkmanager || true)"
+            [ -n "$MGR" ] || { echo "sdkmanager not found; cannot install android-34"; exit 1; }
+            yes | "$MGR" --licenses > /dev/null 2>&1 || true
+            "$MGR" --install "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+          fi
+
+      # app/build.gradle signs `release` with ~/.android/debug.keystore so that sideloading works without
+      # any secrets; the runner has no such file, so make one. Replace it with CAR_LAUNCHER_KEYSTORE
+      # (repo secret, base64) for anything you distribute.
+      - name: Create a debug keystore for the release signature
+        run: |
+          mkdir -p "$HOME/.android"
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" \
+              -storepass android -keypass android -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+      - name: Set up Gradle 8.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.2"
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      # The repository ships gradle-wrapper.properties but no gradle-wrapper.jar (binary blobs in git are
+      # a review hazard), so generate it here rather than committing it.
+      - name: Generate the Gradle wrapper
+        run: gradle --no-daemon wrapper --gradle-version "$GRADLE_VERSION" --distribution-type bin
+
+      - name: Static self-checks (fast, no toolchain needed)
+        run: |
+          python3 tools/gen_icons.py
+          python3 tools/gen_strings.py
+          python3 tools/check_project.py
+          python3 tools/check_members.py
+          python3 tools/check_docs.py
+          python3 tools/validate_jalali.py --quick
+          git diff --exit-code app/src/main/res || {
+            echo "::error::generated resources are out of date; run tools/gen_strings.py + gen_icons.py and commit"; git status --short; exit 1; }
+
+      # The runner's raw log is served from blob storage that outside tooling often cannot fetch, so
+      # every compiler diagnostic is mirrored into a check annotation: `gh api
+      # /repos/<repo>/check-runs/<job>/annotations` then shows exactly what broke. Grouping per file
+      # (tools/ci-errors.awk) matters: GitHub caps annotations, and a first real build produces >100.
+      - name: Assemble debug APK
+        run: |
+          set +e
+          ./gradlew --no-daemon --console=plain assembleDebug > /tmp/dbg.log 2>&1
+          rc=$?
+          set -e
+          echo "--- last 30 lines ---"
+          tail -30 /tmp/dbg.log
+          echo "--- diagnostics ---"
+          awk -f tools/ci-errors.awk /tmp/dbg.log
+          if [ $rc -ne 0 ]; then
+            exit $rc
+          fi
+          echo "debug ok: $(find app/build/outputs/apk -name '*.apk' | head -1)"
+
+      - name: Assemble release APK (R8 + resource shrinking)
+        if: always()
+        run: |
+          # Not `continue-on-error`: the step always succeeds so a release-only breakage (R8, shrinking,
+          # resource removal) is reported as annotations + a summary line without hiding the debug artifact.
+          set +e
+          ./gradlew --no-daemon --console=plain assembleRelease > /tmp/rel.log 2>&1
+          rc=$?
+          set -e
+          tail -20 /tmp/rel.log
+          awk -f tools/ci-errors.awk /tmp/rel.log
+          {
+            echo "### Release build"
+            if [ "$rc" -eq 0 ]; then echo 'assembleRelease succeeded.'
+            else echo "assembleRelease failed (rc=$rc) — see the annotations; the debug APK is unaffected."; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+
+      - name: Lint report (non-blocking)
+        if: always()
+        continue-on-error: true
+        run: ./gradlew --no-daemon --console=plain lintDebug
+
+      - name: Collect APKs
+        if: always()
+        run: |
+          mkdir -p out
+          for f in $(find app/build/outputs/apk -name '*.apk' 2>/dev/null); do
+            # The variant is the *immediate* parent (`…/apk/debug/app-debug.apk`); the extra dirname here
+            # once produced `apk` for both, so debug and release copied onto one file name and the second
+            # overwrote the first — a release with a single asset that looked entirely successful.
+            variant=$(basename "$(dirname "$f")")
+            cp "$f" "out/carlauncher-$variant.apk"
+          done
+          ls -l out/*.apk | awk '{print "collected " $5 " bytes  " $9}'
+          ls -la out
+          if [ -z "$(ls -A out 2>/dev/null)" ]; then echo "no APK produced"; exit 1; fi
+
+      - name: Upload APKs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: carlauncher-apk
+          path: out/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      # A `v*` tag push also publishes a GitHub Release with both APKs attached: a browser click instead
+      # of digging through Actions artifacts, and the only copy that outlives the 30-day retention window.
+      - name: Publish GitHub Release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          {
+            echo 'ساخته‌شده در GitHub Actions — Gradle ۸.۲ / JDK ۱۷ / Platform ۳۴.'
+            echo
+            echo '- `carlauncher-release.apk` — نسخه‌ی پیشنهادی (R8 + کوچک‌سازی منابع)'
+            echo '- `carlauncher-debug.apk` — همان کد بدون shrinking، برای logcat و دیباگ'
+            echo
+            echo 'امضا: keystore دیباگِ همین run. اگر `CAR_LAUNCHER_KEYSTORE` و سه‌تایر alias/پسورد را در'
+            echo 'Secrets بگذارید، امضا ثابت می‌ماند و نصب نسخه‌ی جدید بدون حذف قبلی کار می‌کند'
+            echo '(جزئیات: `docs/build-install.md`).'
+          } > /tmp/notes.md
+          tag="${GITHUB_REF_NAME}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --latest --notes-file /tmp/notes.md
+            gh release upload "$tag" out/*.apk --clobber
+          else
+            gh release create "$tag" out/*.apk --title "Car Launcher $tag" --notes-file /tmp/notes.md
+          fi
+          gh release view "$tag" | head -25
+
+      - name: Upload build reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-reports
+          path: |
+            app/build/reports
+            app/build/outputs/logs
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Where to find the APK
+        if: always()
+        run: |
+          echo "### Artifacts" >> "$GITHUB_STEP_SUMMARY"
+          echo "Download *carlauncher-apk* from this run's **Summary** page (Actions → this run → Artifacts)." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo 'Install: `adb install -r -g carlauncher-debug.apk` — see docs/build-install.md for the permission grants.' >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Static colours only. The launcher's real palette is computed in code (theme/Palette.kt) from the
+  accent preference and the day/night decision: a resource-based palette would need an Activity
+  recreate for every switch, which is unacceptable while the car is moving.
+
+  These values exist so the window background, the icon and the first frame match the code palette —
+  a mismatch here is a visible white flash at boot, which on an SPI-named head unit is the single most
+  complained-about launcher bug.
+-->
+<resources>
+    <color name="car_bg">#FF0E1116</color>
+    <color name="car_bg_amoled">#FF000000</color>
+    <color name="car_surface">#FF171C24</color>
+    <color name="car_accent">#FF3DDC97</color>
+    <color name="car_on_accent">#FF07120C</color>
+    <color name="car_text">#FFE8EEF5</color>
+    <color name="car_text_muted">#FF9AA6B4</color>
+    <color name="car_warning">#FFFFB74D</color>
+    <color name="car_danger">#FFEF5350</color>
+    <color name="car_ok">#FF4CAF87</color>
+</resources>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The call overlay builds its views in code, so the ids it needs are declared here instead of in a
+  layout file. findViewById is not used; the id exists so the view can be looked up again from the
+  broadcast receiver without holding a second reference to it.
+-->
+<resources>
+    <item name="call_number" type="id" />
+    <item name="call_actions" type="id" />
+    <item name="card_body" type="id" />
+</resources>
