@@ -398,8 +398,23 @@ object ActionRouter {
         // when the APK is installed as a platform-signed privileged app) and otherwise fall back to
         // the closest thing we can legally do.
         val injected = try {
-            android.app.Instrumentation().sendKeyCode(code)
-            true
+            // sendKeyDownUpSync refuses to run on the main thread, and a key injection blocks until the
+            // input pipeline has taken the event — so both the call and its exceptions live off ours.
+            val done = java.util.concurrent.CountDownLatch(1)
+            var ok = false
+            val t = Thread {
+                try {
+                    android.app.Instrumentation().sendKeyDownUpSync(code)
+                    ok = true
+                } catch (_: Throwable) {
+                } finally {
+                    done.countDown()
+                }
+            }
+            t.start()
+            done.await(600L, java.util.concurrent.TimeUnit.MILLISECONDS)
+            if (t.isAlive) t.interrupt()
+            ok
         } catch (_: Throwable) {
             false
         }

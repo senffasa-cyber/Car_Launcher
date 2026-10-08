@@ -57,12 +57,11 @@ object NotificationMedia {
         } catch (_: Throwable) {
             false
         }
-        val styleName = try {
-            n.style?.javaClass?.name?.lowercase().orEmpty()
-        } catch (_: Throwable) {
-            ""
-        }
-        val looksLikeMedia = sessionToken || styleName.contains("media")
+        // `Notification.getStyle()` is @hide, so the *shape* is the signal: a media notification ships
+        // the transport buttons and (almost always) a large icon, and there is no other public way to
+        // tell a MediaStyle notification from a plain one.
+        val transportButtons = try { n.actions?.size ?: 0 } catch (_: Throwable) { 0 }
+        val looksLikeMedia = sessionToken || transportButtons >= 2
 
         val title = extras.charSequence(Keys.TITLE)
         val text = firstOf(extras.charSequence(Keys.TEXT), extras.charSequence(Keys.SUB_TEXT))

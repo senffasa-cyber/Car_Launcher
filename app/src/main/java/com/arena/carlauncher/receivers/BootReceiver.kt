@@ -65,13 +65,13 @@ class BootReceiver : BroadcastReceiver() {
                 .setContentText(ctx.getString(R.string.notify_setup_text))
                 .setAutoCancel(true)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
-                .setCategory(Notification.CATEGORY_GUIDANCE)
+                .setCategory(Notification.CATEGORY_STATUS)
                 .setContentIntent(pi)
                 .build()
                 .let { nm ->
-                    val manager = android.app.NotificationManagerCompat.from(ctx)
+                    val manager = ctx.getSystemService(android.app.NotificationManager::class.java)
                     try {
-                        manager.notify(1001, nm)
+                        manager?.notify(1001, nm)
                     } catch (t: Throwable) {
                         // POST_NOTIFICATIONS on 13+ without the grant: not fatal.
                         android.util.Log.d("BootReceiver", "notify refused: ${t.message}")

@@ -98,52 +98,39 @@ jobs:
 
       # The runner's raw log is served from blob storage that outside tooling often cannot fetch, so
       # every compiler diagnostic is mirrored into a check annotation: `gh api
-      # /repos/<repo>/check-runs/<job>/annotations` then shows exactly what broke.
+      # /repos/<repo>/check-runs/<job>/annotations` then shows exactly what broke. Grouping per file
+      # (tools/ci-errors.awk) matters: GitHub caps annotations, and a first real build produces >100.
       - name: Assemble debug APK
         run: |
-          # emit <regex> <count> <skip> -> one annotation-safe blob (newlines as %0A, % escaped first)
-          emit() {
-            grep -E "$1" /tmp/dbg.log | tail -n "+$(( ${3:-0} + 1 ))" | head -n "${2:-40}" \
-              | sed 's|/home/runner/work/[^/]*/[^/]*/||g' \
-              | awk 'BEGIN{ORS=""} {gsub(/%/, "%25"); if (NR > 1) printf "%s", "%0A"; print}'
-          }
           set +e
           ./gradlew --no-daemon --console=plain assembleDebug > /tmp/dbg.log 2>&1
           rc=$?
           set -e
+          echo "--- last 30 lines ---"
           tail -30 /tmp/dbg.log
+          echo "--- diagnostics ---"
+          awk -f tools/ci-errors.awk /tmp/dbg.log
           if [ $rc -ne 0 ]; then
-            total=$(grep -cE '^e: file://' /tmp/dbg.log)
-            echo "kotlin error count: $total"
-            echo "::error title=Kotlin errors 1-45 of $total::$(emit '^e: file://' 45 0)"
-            if [ "$total" -gt 45 ]; then
-              echo "::error title=Kotlin errors 46-90 of $total::$(emit '^e: file://' 45 45)"
-            fi
-            if [ "$total" -gt 90 ]; then
-              echo "::error title=Kotlin errors 91-135 of $total::$(emit '^e: file://' 45 90)"
-            fi
-            echo "::error title=Gradle failure::$(emit 'FAILURE:|What went wrong|Execution failed|Caused by' 25 0)"
             exit $rc
           fi
           echo "debug ok: $(find app/build/outputs/apk -name '*.apk' | head -1)"
 
       - name: Assemble release APK (R8 + resource shrinking)
         if: always()
-        continue-on-error: true
         run: |
-          emit() {
-            grep -E "$1" /tmp/rel.log | head -n "$2" \
-              | sed 's|/home/runner/work/[^/]*/[^/]*/||g' \
-              | awk 'BEGIN{ORS=""} {gsub(/%/, "%25"); if (NR > 1) printf "%s", "%0A"; print}'
-          }
+          # Not `continue-on-error`: the step always succeeds so a release-only breakage (R8, shrinking,
+          # resource removal) is reported as annotations + a summary line without hiding the debug artifact.
           set +e
           ./gradlew --no-daemon --console=plain assembleRelease > /tmp/rel.log 2>&1
           rc=$?
           set -e
           tail -20 /tmp/rel.log
-          if [ $rc -ne 0 ]; then
-            echo "::error title=release build failed (R8 / shrinking)::$(emit 'FAILURE:|What went wrong|Missing class|error:|Caused by' 30)"
-          fi
+          awk -f tools/ci-errors.awk /tmp/rel.log
+          {
+            echo "### Release build"
+            if [ "$rc" -eq 0 ]; then echo 'assembleRelease succeeded.'
+            else echo "assembleRelease failed (rc=$rc) — see the annotations; the debug APK is unaffected."; fi
+          } >> "$GITHUB_STEP_SUMMARY"
           exit 0
 
       - name: Lint report (non-blocking)

@@ -66,7 +66,7 @@ object TripComputer {
             val hours = dtMs / 3600000.0
             // Average of both samples: smoother than either one alone.
             val avg = (speed + prevSpeed) / 2f
-            liveMeters += (avg * hours * 1000f)
+            liveMeters += (avg * hours * 1000.0).toFloat()
             if (avg > 2f) {
                 maxSeen = max(maxSeen, avg)
             } else {

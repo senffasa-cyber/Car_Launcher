@@ -29,6 +29,18 @@ object PermissionHub {
 
     private const val TAG = "PermissionHub"
 
+    // const val lives directly in the object: a named object already allows them, and a nested
+    // `companion object` inside an `object` is not the place to test in CI.
+    /** Stable ids for `Settings.Global.car_launcher_permission = <key>` and for the rows themselves. */
+    const val KEY_LOCATION = "location"
+    const val KEY_NOTIFICATION = "notification"
+    const val KEY_USAGE = "usage"
+    const val KEY_ACCESSIBILITY = "accessibility"
+    const val KEY_OVERLAY = "overlay"
+    const val KEY_WRITE_SETTINGS = "write_settings"
+    const val KEY_BATTERY = "battery"
+    const val KEY_HOME = "home"
+
     data class Item(
         val key: String,
         val title: String,

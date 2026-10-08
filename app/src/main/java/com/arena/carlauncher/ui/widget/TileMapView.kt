@@ -258,11 +258,13 @@ class TileMapView @JvmOverloads constructor(
         if (rotationDeg != 0f) canvas.rotate(-rotationDeg, cx, cy)
 
         // Tiles that can reach the viewport even while rotated (hence the diagonal overscan).
-        val reach = max(width, height) / 2f + tile
-        val tx0 = ((centerWx - reach) / tile).floorToInt()
-        val tx1 = ((centerWx + reach) / tile).floorToInt()
-        val ty0 = ((centerWy - reach) / tile).floorToInt()
-        val ty1 = ((centerWy + reach) / tile).floorToInt()
+        val reach = width.coerceAtLeast(height) / 2f + tile
+        // Math.floor(...).toInt() rather than floorToInt(): the receiver here is a Double computed from
+        // mixed Int/Float/Double operands, and the Kotlin extension only exists per exact type.
+        val tx0 = Math.floor((centerWx - reach) / tile).toInt()
+        val tx1 = Math.floor((centerWx + reach) / tile).toInt()
+        val ty0 = Math.floor((centerWy - reach) / tile).toInt()
+        val ty1 = Math.floor((centerWy + reach) / tile).toInt()
 
         for (tx in tx0..tx1) {
             for (ty in ty0..ty1) {
@@ -284,8 +286,8 @@ class TileMapView @JvmOverloads constructor(
 
         drawRoute(canvas, z, centerWx, centerWy, cx, cy, c)
         destination?.let { (dLat, dLon) ->
-            val px = (Mercator.projectX(dLon, z) - centerWx) + cx
-            val py = (Mercator.projectY(dLat, z) - centerWy) + cy
+            val px = ((Mercator.projectX(dLon, z) - centerWx) + cx).toFloat()
+            val py = ((Mercator.projectY(dLat, z) - centerWy) + cy).toFloat()
             drawPin(canvas, px, py, c.danger)
         }
         canvas.restore()
@@ -309,8 +311,8 @@ class TileMapView @JvmOverloads constructor(
         path.reset()
         var started = false
         for (p in route) {
-            val px = (Mercator.projectX(p[1], z) - centerWx) + cx
-            val py = (Mercator.projectY(p[0], z) - centerWy) + cy
+            val px = ((Mercator.projectX(p[1], z) - centerWx) + cx).toFloat()
+            val py = ((Mercator.projectY(p[0], z) - centerWy) + cy).toFloat()
             if (!started) {
                 path.moveTo(px, py)
                 started = true

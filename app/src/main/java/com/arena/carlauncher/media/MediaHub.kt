@@ -14,12 +14,10 @@ import android.os.SystemClock
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import android.view.KeyEvent
+import android.media.session.MediaController
+import android.media.session.MediaMetadata
+import android.media.session.PlaybackState
 import androidx.core.app.NotificationManagerCompat
-import androidx.media.session.MediaControllerCompat
-import androidx.media.session.MediaDescriptionCompat
-import androidx.media.session.MediaMetadataCompat
-import androidx.media.session.MediaSessionCompat
-import androidx.media.session.PlaybackStateCompat
 import com.arena.carlauncher.data.LauncherPrefs
 import com.arena.carlauncher.data.MediaSnapshot
 import kotlinx.coroutines.channels.BufferOverflow
@@ -69,10 +67,16 @@ object MediaHub {
     private var listenerComponent: ComponentName? = null
     private var sessionsListener: MediaSessionManager.OnActiveSessionsChangedListener? = null
 
-    private var controller: MediaControllerCompat? = null
+    private var controller: MediaController? = null
     private var controllerPkg: String = ""
     private var controllerToken: MediaSession.Token? = null
-    private var knownTokens: List<MediaSession.Token> = emptyList()
+
+    /**
+     * `MediaSessionManager.getActiveSessions()` hands out live `MediaController`s, not tokens — going
+     * through `MediaSessionCompat.Token` only added a reflection layer for a class this app never needed
+     * app never otherwise needs, and one more artifact on a launcher that must stay resident.
+     */
+    private var knownControllers: List<MediaController> = emptyList()
     private var notif: NotificationMedia.Parsed? = null
     private var tracking = false
     private var lastSessionFetch = 0L
@@ -107,9 +111,8 @@ object MediaHub {
         main.removeCallbacks(tick)
         try {
             val l = sessionsListener
-            val c = listenerComponent
-            if (l != null && c != null && Build.VERSION.SDK_INT >= 30) {
-                msm?.removeOnActiveSessionsChangedListener(l, c)
+            if (l != null && Build.VERSION.SDK_INT >= 26) {
+                msm?.removeOnActiveSessionsChangedListener(l)
             }
         } catch (t: Throwable) {
             Log.d(TAG, "session listener removal unavailable: ${t.message}")
@@ -136,8 +139,9 @@ object MediaHub {
         val comp = listenerComponent ?: return
         if (sessionsListener != null) return
         try {
-            val l = MediaSessionManager.OnActiveSessionsChangedListener { tokens ->
-                onSessionsChanged(tokens ?: emptyList())
+            if (Build.VERSION.SDK_INT < 26) return
+            val l = MediaSessionManager.OnActiveSessionsChangedListener { controllers ->
+                onSessionsChanged(controllers ?: emptyList())
             }
             sessionsListener = l
             msm?.addOnActiveSessionsChangedListener(l, comp)
@@ -169,9 +173,9 @@ object MediaHub {
     }
 
     // ------------------------------------------------------------------ sessions
-    private fun onSessionsChanged(tokens: List<MediaSession.Token>) {
-        knownTokens = tokens
-        _sessions.tryEmit(tokens.map { SessionBridge.ownerOf(it) }.filter { it.isNotEmpty() }.distinct())
+    private fun onSessionsChanged(controllers: List<MediaController>) {
+        knownControllers = controllers
+        _sessions.tryEmit(controllers.map { it.packageName.orEmpty() }.filter { it.isNotEmpty() }.distinct())
         pickAndAttach()
     }
 
@@ -181,8 +185,8 @@ object MediaHub {
         if (!force && now - lastSessionFetch < 1500L) return
         lastSessionFetch = now
         try {
-            val tokens = msm?.getActiveSessions(comp) ?: emptyList()
-            onSessionsChanged(tokens)
+            val list = msm?.getActiveSessions(comp) ?: emptyList()
+            onSessionsChanged(list)
         } catch (t: Throwable) {
             Log.w(TAG, "getActiveSessions failed: ${t.message}")
         }
@@ -190,9 +194,8 @@ object MediaHub {
 
     fun availableSources(ctx: Context): List<Pair<String, String>> {
         val out = ArrayList<Pair<String, String>>()
-        val pm = ctx.packageManager
-        for (t in knownTokens) {
-            val pkg = SessionBridge.ownerOf(t)
+        for (t in knownControllers) {
+            val pkg = t.packageName.orEmpty()
             if (pkg.isEmpty() || out.any { it.first == pkg }) continue
             out.add(pkg to labelFor(ctx, pkg))
         }
@@ -210,7 +213,7 @@ object MediaHub {
     private fun pickAndAttach() {
         val ctx = app ?: return
         val preferred = prefs?.mediaSessionPackage.orEmpty()
-        val candidate = knownTokens.firstOrNull { SessionBridge.ownerOf(it) == preferred }
+        val candidate = knownControllers.firstOrNull { it.packageName == preferred }
             ?: bestByPriority()
 
         if (candidate == null) {
@@ -218,8 +221,8 @@ object MediaHub {
             publish()
             return
         }
-        if (candidate === controllerToken) {
-            if (controller != null) publish()
+        if (candidate === controller) {
+            publish()
             return
         }
         attach(ctx, candidate)
@@ -229,51 +232,46 @@ object MediaHub {
      * `getActiveSessions()` is ordered by recency, so the first entry is what the driver is
      * listening to; an actively playing session always wins over a merely registered one.
      */
-    private fun bestByPriority(): MediaSession.Token? {
-        val tokens = knownTokens
-        if (tokens.isEmpty()) return null
-        return tokens.firstOrNull { isPlayingToken(it) } ?: tokens.first()
+    private fun bestByPriority(): MediaController? {
+        val list = knownControllers
+        if (list.isEmpty()) return null
+        return list.firstOrNull { isPlaying(it) } ?: list.first()
     }
 
-    private fun isPlayingToken(token: MediaSession.Token): Boolean {
-        val ctx = app ?: return false
-        return try {
-            val ax = SessionBridge.toAndroidXToken(ctx, token) as? MediaSessionCompat.Token
-                ?: return false
-            val c = MediaControllerCompat(ctx, ax)
-            val s = c.playbackState?.state
-            try {
-                c.destroy()
-            } catch (_: Throwable) {
-            }
-            s == PlaybackStateCompat.STATE_PLAYING
-        } catch (_: Throwable) {
-            false
+    private fun isPlaying(c: MediaController): Boolean = try {
+        c.playbackState?.state == PlaybackState.STATE_PLAYING
+    } catch (_: Throwable) {
+        false
+    }
+
+    private fun attach(@Suppress("UNUSED_PARAMETER") ctx: Context, c: MediaController) {
+        detachController()
+        controller = c
+        controllerToken = try { c.sessionToken } catch (_: Throwable) { null }
+        controllerPkg = c.packageName.orEmpty()
+        try {
+            c.registerCallback(callback)
+            Log.i(TAG, "media controller attached: $controllerPkg")
+        } catch (t: Throwable) {
+            Log.w(TAG, "controller attach failed: ${t.message}")
+            controller = null
         }
+        publish()
     }
 
-    private fun attach(ctx: Context, token: MediaSession.Token) {
+    /** A token lifted out of a media notification (`NotificationMedia.Keys.MEDIA_SESSION`). */
+    private fun attachToken(ctx: Context, token: MediaSession.Token) {
         detachController()
         controllerToken = token
-        controllerPkg = SessionBridge.ownerOf(token)
-        val ax = try {
-            SessionBridge.toAndroidXToken(ctx, token) as? MediaSessionCompat.Token
+        controllerPkg = ""
+        val c = try {
+            MediaController(ctx, token).also { it.registerCallback(callback) }
         } catch (t: Throwable) {
-            Log.w(TAG, "token bridge failed: ${t.message}")
+            Log.w(TAG, "controller from token failed: ${t.message}")
             null
         }
-        if (ax != null) {
-            try {
-                val c = MediaControllerCompat(ctx, ax)
-                c.registerCallback(callback)
-                controller = c
-                controllerPkg = controllerPkg.ifBlank { c.packageName.orEmpty() }
-                Log.i(TAG, "media controller attached: $controllerPkg")
-            } catch (t: Throwable) {
-                Log.w(TAG, "controller attach failed: ${t.message}")
-                controller = null
-            }
-        }
+        controller = c
+        controllerPkg = c?.packageName.orEmpty()
         publish()
     }
 
@@ -283,22 +281,20 @@ object MediaHub {
                 c.unregisterCallback(callback)
             } catch (_: Throwable) {
             }
-            try {
-                c.destroy()
-            } catch (_: Throwable) {
-            }
+            // No `destroy()` on the framework MediaController (that was a compat-wrapper convenience):
+            // unregistering is the whole teardown, and GC releases the binder.
         }
         controller = null
         controllerToken = null
         controllerPkg = ""
     }
 
-    private val callback = object : MediaControllerCompat.Callback() {
-        override fun onMetadataChanged(metadata: MediaMetadataCompat?) {
+    private val callback = object : MediaController.Callback() {
+        override fun onMetadataChanged(metadata: MediaMetadata?) {
             publish()
         }
 
-        override fun onPlaybackStateChanged(state: PlaybackStateCompat?) {
+        override fun onPlaybackStateChanged(state: PlaybackState?) {
             publish()
         }
 
@@ -326,7 +322,7 @@ object MediaHub {
                 null
             }
             if (token != null && token !== controllerToken) {
-                attach(ctx, token)
+                attachToken(ctx, token)
                 return
             }
         }
@@ -372,22 +368,23 @@ object MediaHub {
         }
     }
 
-    private fun fromController(c: MediaControllerCompat, fallback: MediaSnapshot, ctx: Context): MediaSnapshot {
-        val md = c.metadata
-        val desc: MediaDescriptionCompat? = md?.description
-        val ps = c.playbackState
+    private fun fromController(c: MediaController, fallback: MediaSnapshot, ctx: Context): MediaSnapshot {
+        val md = try { c.metadata } catch (_: Throwable) { null }
+        val ps = try { c.playbackState } catch (_: Throwable) { null }
         val actions = ps?.actions ?: 0L
 
-        val title = desc?.title?.toString().orEmpty()
-            .ifBlank { md?.getString(MediaMetadataCompat.METADATA_KEY_TITLE).orEmpty() }
-        val artist = desc?.subtitle?.toString().orEmpty()
-            .ifBlank { md?.getString(MediaMetadataCompat.METADATA_KEY_ARTIST).orEmpty() }
-        val album = md?.getString(MediaMetadataCompat.METADATA_KEY_ALBUM).orEmpty()
-            .ifBlank { desc?.description?.toString().orEmpty() }
-        val duration = md?.getLong(MediaMetadataCompat.METADATA_KEY_DURATION) ?: 0L
+        // `MediaDescriptionCompat` existed only to normalise metadata vs. description across the two
+        // compat sources; the framework metadata bundle is the single truth here, with the parsed
+        // notification already in `fallback` as the backup.
+        val title = md?.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
+            .ifBlank { fallback.title }
+        val artist = md?.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
+            .ifBlank { fallback.artist }
+        val album = md?.getString(MediaMetadata.METADATA_KEY_ALBUM).orEmpty()
+        val duration = md?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: fallback.durationMs
 
-        val state = ps?.state ?: PlaybackStateCompat.STATE_NONE
-        val playing = state == PlaybackStateCompat.STATE_PLAYING
+        val state = ps?.state ?: PlaybackState.STATE_NONE
+        val playing = state == PlaybackState.STATE_PLAYING
         val position = ps?.position ?: 0L
         val lastUpdate = ps?.lastPositionUpdateTime ?: 0L
         val speed = try {
@@ -409,10 +406,10 @@ object MediaHub {
             positionMs = extrapolated,
             isPlaying = playing,
             hasSession = true,
-            canSeek = actions and PlaybackStateCompat.ACTION_SEEK_TO != 0L,
-            canSkipNext = actions and PlaybackStateCompat.ACTION_SKIP_TO_NEXT != 0L,
-            canSkipPrev = actions and PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS != 0L,
-            artwork = pickArtwork(md, desc, fallback),
+            canSeek = actions and PlaybackState.ACTION_SEEK_TO != 0L,
+            canSkipNext = actions and PlaybackState.ACTION_SKIP_TO_NEXT != 0L,
+            canSkipPrev = actions and PlaybackState.ACTION_SKIP_TO_PREVIOUS != 0L,
+            artwork = pickArtwork(md, fallback),
             source = MediaSnapshot.SOURCE_SESSION,
             updatedAtElapsed = SystemClock.elapsedRealtime(),
             playingSpeed = if (speed <= 0f) 1f else speed
@@ -420,14 +417,9 @@ object MediaHub {
     }
 
     /** Artwork is downsampled exactly once here so the card and the backdrop glow share one bitmap. */
-    private fun pickArtwork(
-        md: MediaMetadataCompat?,
-        desc: MediaDescriptionCompat?,
-        fallback: MediaSnapshot
-    ): Bitmap? {
-        val raw: Bitmap? = md?.getBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART)
-            ?: md?.getBitmap(MediaMetadataCompat.METADATA_KEY_ART)
-            ?: desc?.iconBitmap
+    private fun pickArtwork(md: MediaMetadata?, fallback: MediaSnapshot): Bitmap? {
+        val raw: Bitmap? = md?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+            ?: md?.getBitmap(MediaMetadata.METADATA_KEY_ART)
             ?: fallback.artwork
         if (raw == null) {
             artCache = null
@@ -487,7 +479,7 @@ object MediaHub {
         }
     }
 
-    private fun useController(c: MediaControllerCompat, action: Action): Boolean = try {
+    private fun useController(c: MediaController, action: Action): Boolean = try {
         val tc = c.transportControls
         when (action) {
             Action.PLAY -> {
@@ -497,7 +489,7 @@ object MediaHub {
                 tc.pause(); true
             }
             Action.PLAY_PAUSE -> {
-                if (c.playbackState?.state == PlaybackStateCompat.STATE_PLAYING) tc.pause() else tc.play()
+                if (c.playbackState?.state == PlaybackState.STATE_PLAYING) tc.pause() else tc.play()
                 true
             }
             Action.NEXT -> {
@@ -519,7 +511,7 @@ object MediaHub {
     fun seekTo(ms: Long) {
         val c = controller ?: return
         try {
-            val allowed = (c.playbackState?.actions ?: 0L) and PlaybackStateCompat.ACTION_SEEK_TO
+            val allowed = (c.playbackState?.actions ?: 0L) and PlaybackState.ACTION_SEEK_TO
             if (allowed != 0L) {
                 c.transportControls.seekTo(ms.coerceAtLeast(0L))
                 publish()
@@ -618,7 +610,7 @@ object MediaHub {
             val playing = _state.value.isPlaying
             val none = _state.value.source == MediaSnapshot.SOURCE_NONE
             publish()
-            if (none && knownTokens.isEmpty() && listenerComponent != null) {
+            if (none && knownControllers.isEmpty() && listenerComponent != null) {
                 app?.let { fetchSessions(it, force = true) }
             }
             main.postDelayed(this, if (playing) TICK_MS else TICK_MS * 3L)
@@ -627,7 +619,7 @@ object MediaHub {
 
     fun debugDump(): String = buildString {
         appendLine("tracking=$tracking access=${app?.let { notificationAccessGranted(it) }}")
-        appendLine("controller=$controllerPkg tokens=${knownTokens.size} notif=${notif?.pkg}")
+        appendLine("controller=$controllerPkg sessions=${knownControllers.size} notif=${notif?.pkg}")
         val s = _state.value
         appendLine("${s.title} / ${s.artist} playing=${s.isPlaying} src=${s.source}")
     }

@@ -2,8 +2,6 @@ package com.arena.carlauncher.home
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
-import android.accessibilityservice.AccessibilityService
-import android.accessibilityservice.AccessibilityServiceInfoInfo
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings

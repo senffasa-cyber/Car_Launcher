@@ -103,9 +103,9 @@ object AppRepository {
                 )
                 val seen = HashSet<String>()
                 for (ri in resolved) {
-                    val ai: ApplicationInfo = ri.activityInfo ?: continue
+                    val ai = ri.activityInfo ?: continue
                     val pkg = ai.packageName
-                    val cls = ri.activityInfo?.name ?: continue
+                    val cls = ai.name ?: continue
                     val key = "$pkg|$cls"
                     if (!seen.add(key)) continue
                     val label = try {

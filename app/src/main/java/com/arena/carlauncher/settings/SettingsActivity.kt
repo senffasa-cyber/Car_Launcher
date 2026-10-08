@@ -426,7 +426,7 @@ class SettingsActivity : androidx.appcompat.app.AppCompatActivity() {
         return out
     }
 
-    private fun behaviour(): List<View>() {
+    private fun behaviour(): List<View> {
         val out = ArrayList<View>()
         out.add(sectionHeader(R.string.settings_behaviour, getString(R.string.behaviour_note)))
         out.add(PrefRows.switchRow(this, getString(R.string.pref_auto_center), getString(R.string.pref_auto_center_sum), prefs.autoSwitchCenter) { prefs.autoSwitchCenter = it })
@@ -711,22 +711,6 @@ class SettingsActivity : androidx.appcompat.app.AppCompatActivity() {
         }
     }
 
-    /** Card list slot keys; persisted as CSV in [LauncherPrefs]. */
-    private const val SLOT_CENTER = "center"
-    private const val SLOT_LEFT = "left"
-    private const val SLOT_RIGHT = "right"
-
-    fun open(ctx: Context, section: String) {
-        try {
-            ctx.startActivity(
-                Intent(ctx, SettingsActivity::class.java)
-                    .putExtra(EXTRA_SECTION, section)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            )
-        } catch (_: Throwable) {
-        }
-    }
-
     private fun versionName(): String = try {
         packageManager.getPackageInfo(packageName, 0).versionName ?: "?"
     } catch (_: Throwable) {
@@ -734,6 +718,23 @@ class SettingsActivity : androidx.appcompat.app.AppCompatActivity() {
     }
 
     companion object {
+        /** Card list slot keys; persisted as CSV in [LauncherPrefs]. */
+        const val SLOT_CENTER = "center"
+        const val SLOT_LEFT = "left"
+        const val SLOT_RIGHT = "right"
+
+        /** Entry point for tiles/actions: `SettingsActivity.open(ctx, "vehicle")`. */
+        fun open(ctx: Context, section: String) {
+            try {
+                ctx.startActivity(
+                    Intent(ctx, SettingsActivity::class.java)
+                        .putExtra(EXTRA_SECTION, section)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            } catch (_: Throwable) {
+            }
+        }
+
         private const val REQ_WALLPAPER = 71
         private const val REQ_APPS = 72
         const val APP_PICKER = 72

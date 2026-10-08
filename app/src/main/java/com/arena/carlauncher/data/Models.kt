@@ -146,7 +146,7 @@ data class WeatherSnapshot(
     val updatedAt: Long = 0
 ) {
     val valid: Boolean get() = updatedAt > 0
-    val ageMinutes: Int get() = if (updatedAt == 0L) Int.MAX_VALUE else ((System.currentTimeMillis() - updatedAt) / 60000L).roundToInt()
+    val ageMinutes: Int get() = if (updatedAt == 0L) Int.MAX_VALUE else ((System.currentTimeMillis() - updatedAt) / 60000L).toInt()
 }
 
 /** A geocoded point: used for Home/Work/recent/search results. */

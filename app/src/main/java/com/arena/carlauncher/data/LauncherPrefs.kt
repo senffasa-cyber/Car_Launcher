@@ -525,6 +525,7 @@ class LauncherPrefs private constructor(private val sp: SharedPreferences) {
         private const val K_TRIP_ODOMETER = "trip_odometer"
         private const val K_TRIP_LAST = "trip_last"
         private const val K_DEBUG = "debug_log"
+        private const val K_CALL_BANNER = "call_banner"
 
         @Volatile
         private var instance: LauncherPrefs? = null

@@ -68,7 +68,8 @@ class ImageCache private constructor(maxBytes: Int) {
         synchronized(waiters) { waiters.remove(key) }
     }
 
-    fun trim() = memory.trimMemory()
+    /** Half, not empty: a low-memory signal must not turn every cached icon into a fresh decode. */
+    fun trim() = memory.trimToSize(memory.maxSize() / 2)
     fun evictAll() = memory.evictAll()
 
     fun snapshotCount() = memory.size()
@@ -193,7 +194,7 @@ class ImageCache private constructor(maxBytes: Int) {
         }
 
         fun drawableOf(bitmap: Bitmap?, density: Int): Drawable? =
-            bitmap?.let { BitmapDrawable(android.content.res.Resources.getSystem(), it).apply { setDensity(density) } }
+            bitmap?.let { BitmapDrawable(android.content.res.Resources.getSystem(), it).apply { setTargetDensity(density) } }
 
         fun rotate(src: Bitmap, degrees: Float): Bitmap {
             if (degrees % 360f == 0f) return src

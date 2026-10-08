@@ -177,7 +177,8 @@ class AppPickerActivity : Activity() {
         override fun getItemCount(): Int = items.size
     }
 
-    class Cell(val cell: View, val icon: ImageView, val label: android.widget.TextView)
+    class Cell(val cell: View, val icon: ImageView, val label: android.widget.TextView) :
+        RecyclerView.ViewHolder(cell)
 
     companion object {
         const val EXTRA_MODE = "mode"

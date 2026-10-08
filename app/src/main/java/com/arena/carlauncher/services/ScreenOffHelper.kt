@@ -2,6 +2,7 @@ package com.arena.carlauncher.services
 
 import android.content.Context
 import android.os.PowerManager
+import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
@@ -30,7 +31,7 @@ object ScreenOffHelper {
         if (pm != null) {
             try {
                 pm.javaClass.getMethod("goToSleep", Long::class.javaPrimitiveType)
-                    .invoke(pm, System.uptimeMillis())
+                    .invoke(pm, SystemClock.uptimeMillis())
                 undim(ctx)
                 return
             } catch (t: Throwable) {

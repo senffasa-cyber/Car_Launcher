@@ -123,7 +123,7 @@ adb shell am broadcast -a arena.car.VEHICLE --ef speed 47.5 --ef coolant 88   # 
 
 ## طراحی، در یک نگاه
 
-* **بدون Compose، بدون Glide، بدون OkHttp، بدون SDK نقشه.** هفت وابستگی AndroidX/Kotlin؛ برای دستگاهی که
+* **بدون Compose، بدون Glide، بدون OkHttp، بدون SDK نقشه.** شش وابستگی (پنج AndroidX به‌علاوه coroutines)؛ برای دستگاهی که
   باید همیشه مقیم RAM بماند و ۲٫۷ گیگ رمش با سه برنامه‌ی ناوبری پر می‌شود.
 * **HTTP بدون کتابخانه:** `HttpURLConnection` با timeout (کاشی ۴s/۶s، JSON ۵s/۸s)، بدون TLS pinning و
   بدون `network_security_config` — چون `targetSdk` عمداً ۲۹ است، محدودیت پیش‌فرض cleartext اعمال

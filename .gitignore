@@ -11,3 +11,7 @@ captures/
 *.keystore
 !debug.keystore
 .DS_Store
+
+# Python scratch from the tools/ scripts
+__pycache__/
+*.pyc

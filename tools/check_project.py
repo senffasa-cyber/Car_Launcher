@@ -441,6 +441,45 @@ def check_layoutparams_receiver():
     return problems
 
 
+def check_member_shapes():
+    """Two mistakes the brace balance cannot see, both from a real 104-error build.
+
+    1. `private fun behaviour(): List<View>() {` — a return type written with call parentheses. The
+       parser then reads the declaration as a bodiless function, so the error is reported at the
+       *signature* ("Function without a body must be abstract") and everything below it in the file
+       cascades into nonsense. Always a typo, never intentional.
+    2. `const val` living directly in a class body. It is legal at top level, in a named `object`, and
+       in a `companion object` — and moving members between those scopes is exactly what an edit does
+       by accident, which then also un-resolves every `Foo.open(...)` style companion call site.
+    """
+    problems = []
+    bad_fun = re.compile(r"\bfun\s+[\w`.]+\s*(?:<[^<>]*>)?\s*\([^()]*\)\s*:\s*[\w.]+(?:\s*<[^<>]*>)?\s*\(\)\s*(?:\{|=)")
+    const_line = re.compile(r"^\s*(?:(?:private|internal|public|protected)\s+)*const\s+val\s")
+    for path in kotlin_files():
+        rel = os.path.relpath(path, ROOT)
+        raw = open(path, encoding="utf-8").read().split("\n")
+        code = strip_code("\n".join(raw)).split("\n")
+        stack = []
+        for idx, line in enumerate(code):
+            stripped = line.strip()
+            if stripped.startswith("fun ") or " fun " in stripped:
+                if bad_fun.search(stripped):
+                    problems.append("%s:%d return type written as a call (`: Type()`): %s"
+                                    % (rel, idx + 1, (raw[idx].strip())[:100]))
+            depth = line.count("{") - line.count("}")
+            if const_line.match(line):
+                scope = stack[-1] if stack else ""
+                if scope and not re.search(r"\bobject\b", scope):
+                    problems.append("%s:%d `const val` outside an object/companion (enclosing: %s)"
+                                    % (rel, idx + 1, scope.strip()[:70]))
+            for _ in range(max(0, line.count("{"))):
+                stack.append(raw[idx] if raw[idx].strip() else (stack[-1] if stack else ""))
+            for _ in range(max(0, depth * 0 + line.count("}"))):
+                if stack:
+                    stack.pop()
+    return problems
+
+
 def check_gradle():
     problems = []
     path = os.path.join(ROOT, "app", "build.gradle")
@@ -466,6 +505,7 @@ def main():
         ("gradle", check_gradle()),
         ("setter hygiene", check_setters()),
         ("layoutparams receiver", check_layoutparams_receiver()),
+        ("member shapes", check_member_shapes()),
     ]
     total = 0
     for title, problems in sections:

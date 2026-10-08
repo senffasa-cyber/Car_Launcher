@@ -94,9 +94,10 @@ dependencies {
     implementation 'androidx.recyclerview:recyclerview:1.3.2'    // app grid, search results, settings list
     implementation 'androidx.viewpager2:viewpager2:1.0.0'        // the centre carousel
     implementation 'androidx.lifecycle:lifecycle-service:2.7.0'  // LauncherService lifetime + scope
-    implementation 'androidx.media:media:1.7.0'                   // MediaSessionCompat token bridge
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
-    // Not used, deliberately: Compose (RAM), Glide/OkHttp (ImageCache + HttpURLConnection cover it),
+    // Not used, deliberately: androidx.media (MediaHub speaks the framework android.media.session API
+    // directly — the compat wrappers only added a reflection bridge), Compose (RAM),
+    // Glide/OkHttp (ImageCache + HttpURLConnection cover it),
     // androidx.preference (the settings screen is hand-built), any maps SDK (no API key, works where
     // Google is blocked).
 }
