@@ -511,6 +511,73 @@ def check_apply_shadowing():
     return problems
 
 
+def check_jvm_signature_clashes():
+    """`var headingUp` and `fun setHeadingUp(on: Boolean)` in the same body are one JVM method twice.
+
+    A public Kotlin property emits `setHeadingUp(Z)V` / `getHeadingUp()Z` itself, so a hand-written
+    function of that name and shape is a "Platform declaration clash" — a real compile error that no
+    brace or name check predicts, because both declarations are individually fine. This bit
+    `TileMapView`, where the helper existed *and* the property was written directly from another place.
+
+    Deliberately conservative, because this check runs in CI and a false positive blocks a build:
+    only non-private properties, only single-parameter setters / zero-parameter getters, and only when
+    the JVM-visible types agree (explicit type text, or a `true`/`1`/`1f`/`""` literal for inferred ones).
+    `private var configured` + `fun setConfigured(ids: List<String>)` is therefore not reported: private
+    properties do not occupy the accessor name the way public ones do.
+    """
+    lit = {"true": "Boolean", "false": "Boolean", "": ""}
+    mod = r"(?:(?:private|internal|public|protected|open|override|final|lateinit|const)\s+)*"
+    prop_re = re.compile(r"^\s*" + mod + r"(var|val)\s+(\w+)\s*(?::\s*([\w.<>, ?]+))?(?:\s*=\s*(.+?))?\s*(?:\{|$)")
+    set_re = re.compile(r"^\s*(?:(?:private|internal|public|protected|open|override|final)\s+)*fun\s+set([A-Z]\w*)\s*\(\s*\w+\s*:\s*([\w.<>, ?]+)\s*\)")
+    get_re = re.compile(r"^\s*(?:(?:private|internal|public|protected|open|override|final)\s+)*fun\s+get([A-Z]\w*)\s*\(\s*\)\s*:\s*([\w.<>, ?]+)")
+
+    def norm(t):
+        t = (t or "").strip()
+        if t in lit and lit[t] != "":
+            return lit[t]
+        if re.fullmatch(r"-?\d+", t):
+            return "Int"
+        if re.fullmatch(r"-?\d+f", t, re.I):
+            return "Float"
+        if re.fullmatch(r"-?\d+(\.\d+)?", t):
+            return "Double"
+        if re.fullmatch(r'"[^"]*"', t):
+            return "String"
+        return t
+
+    problems = []
+    for path in kotlin_files():
+        rel = os.path.relpath(path, ROOT)
+        raw = open(path, encoding="utf-8").read().split("\n")
+        code = strip_code("\n".join(raw)).split("\n")
+        depth = 0
+        props = {}      # (name, depth) -> type
+        for line in code:
+            if "private" in line.split(" var ")[0].split(" val ")[0]:
+                depth += line.count("{") - line.count("}")
+                continue
+            m = prop_re.match(line)
+            if m and m.group(2) not in ("var", "val"):
+                t = norm(m.group(3) or m.group(4))
+                if t:
+                    props[(m.group(2)[0].lower() + m.group(2)[1:], depth)] = t
+            depth += line.count("{") - line.count("}")
+        depth = 0
+        for idx, line in enumerate(code):
+            for rx, kind in ((set_re, "set"), (get_re, "get")):
+                m = rx.match(line)
+                if not m:
+                    continue
+                name = m.group(1)[0].lower() + m.group(1)[1:]
+                ptype = props.get((name, depth))
+                if ptype and norm(m.group(2)) == ptype:
+                    problems.append("%s:%d `fun %s%s(%s)` is the same JVM signature as the %s of `%s` — fold it into the accessor"
+                                    % (rel, idx + 1, kind, name[0].upper() + name[1:],
+                                       "on: " + ptype if kind == "set" else "", kind, name))
+            depth += line.count("{") - line.count("}")
+    return problems
+
+
 def check_gradle():
     problems = []
     path = os.path.join(ROOT, "app", "build.gradle")
@@ -538,6 +605,7 @@ def main():
         ("layoutparams receiver", check_layoutparams_receiver()),
         ("member shapes", check_member_shapes()),
         ("apply shadowing", check_apply_shadowing()),
+        ("jvm signature clashes", check_jvm_signature_clashes()),
     ]
     total = 0
     for title, problems in sections:
