@@ -1,0 +1,450 @@
+#!/usr/bin/env python3
+"""Static self-check for the launcher project.
+
+There is no Android toolchain in the environment this project was authored in, so this script stands in
+for the parts of `./gradlew assembleDebug` that catch problems early:
+
+  1. **resources** — every `R.<type>.<name>` in Kotlin and every `@<type>/<name>` in XML resolves to a
+     resource that exists on disk. This is by far the most common build failure in a code-only UI
+     project (no layouts means no compiler help with typos).
+  2. **manifest** — every component named there has a source file (aliases excepted).
+  3. **kotlin syntax** — balanced brackets outside strings/comments, no merge markers.
+  4. **api guarding** — framework members newer than `minSdkVersion` appear inside a function that has a
+     `Build.VERSION` check or a try/catch. On an old head-unit ROM this class of bug is an instant
+     crash, and the lint check for it is not enabled by default.
+  5. **res xml** — every XML file parses, and `android:` attributes are only used where the namespace is
+     declared.
+
+    python3 tools/check_project.py
+"""
+import os
+import re
+import sys
+import xml.etree.ElementTree as ET
+
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+SRC = os.path.join(ROOT, "app", "src", "main")
+JAVA = os.path.join(SRC, "java")
+RES = os.path.join(SRC, "res")
+MANIFEST = os.path.join(SRC, "AndroidManifest.xml")
+
+TYPE_DIRS = {
+    # directory-based resources: the file name is the resource name
+    "drawable": ("drawable", "mipmap"),
+    "mipmap": ("mipmap", "drawable"),
+    "layout": ("layout",),
+    "anim": ("anim", "animator"),
+    "animator": ("animator", "anim"),
+    "xml": ("xml",),
+    "raw": ("raw",),
+    "font": ("font",),
+    "menu": ("menu",),
+    # value-based resources: the child tag is the type (see collect_resources)
+    "string": ("string",),
+    "color": ("color",),
+    "dimen": ("dimen",),
+    "style": ("style",),
+    "integer": ("integer",),
+    "bool": ("bool",),
+    "array": ("array", "string-array", "integer-array"),
+    "plurals": ("plurals",),
+    "attr": ("attr",),
+    "id": ("id",),
+}
+
+
+def kotlin_files():
+    for dp, _, files in os.walk(JAVA):
+        for f in sorted(files):
+            if f.endswith(".kt"):
+                yield os.path.join(dp, f)
+
+
+def res_files():
+    for dp, _, files in os.walk(RES):
+        for f in sorted(files):
+            if f.endswith(".xml"):
+                yield os.path.join(dp, f)
+
+
+def collect_resources():
+    """type -> names, from the file names under res/<qualifier>/ and from <resources> children."""
+    found = {}
+    for dp, _dirs, files in os.walk(RES):
+        base = os.path.basename(dp).split("-")[0]
+        if base == "values":
+            base = "value"
+        for f in files:
+            if not f.endswith(".xml"):
+                continue
+            if base == "value":
+                continue
+            found.setdefault(base, set()).add(f[:-4])
+    for dp, _dirs, files in os.walk(RES):
+        if os.path.basename(dp).split("-")[0] not in ("value", "values"):
+            continue
+        for f in files:
+            path = os.path.join(dp, f)
+            try:
+                root = ET.parse(path).getroot()
+            except Exception as exc:
+                print("  ! cannot parse %s: %s" % (os.path.relpath(path, ROOT), exc))
+                continue
+            for child in root:
+                n = child.get("name")
+                if n is None:
+                    continue
+                if child.tag == "item":
+                    t = child.get("type")
+                    if t:
+                        found.setdefault(t, set()).add(n)
+                else:
+                    found.setdefault(child.tag, set()).add(n)
+    return found
+
+
+# ---------------------------------------------------------------- kotlin tokenizer
+
+
+def strip_code(text):
+    """Blank out comments, string literals and char literals, keeping line breaks.
+
+    Written as a scanner rather than a stack of regexes because each shortcut creates a false positive
+    that costs more time than it saves: an apostrophe inside a comment unbalances a regex-based char
+    rule, and a double slash inside a URL string unbalances a regex-based comment rule.
+    Kotlin string templates with nested braces are followed so that `"${a ?: b}"` does not leak a
+    bracket into the balance count.
+    """
+    out = []
+    i = 0
+    n = len(text)
+    while i < n:
+        two = text[i:i + 2]
+        if two == "//":
+            j = text.find("\n", i)
+            i = n if j < 0 else j
+            continue
+        if two == "/*":
+            j = text.find("*/", i + 2)
+            j = n if j < 0 else j + 2
+            out.append("\n" * text.count("\n", i, j))
+            i = j
+            continue
+        if text.startswith('"""', i):
+            j = text.find('"""', i + 3)
+            j = n if j < 0 else j + 3
+            out.append("\n" * text.count("\n", i, j))
+            i = j
+            continue
+        if text[i] == '"':
+            i += 1
+            while i < n:
+                if text[i] == "\\":
+                    i += 2
+                    continue
+                if text[i] == '"':
+                    i += 1
+                    break
+                if text[i] == "$" and text[i + 1:i + 2] == "{":
+                    depth = 1
+                    i += 2
+                    while i < n and depth:
+                        if text[i] == "{":
+                            depth += 1
+                        elif text[i] == "}":
+                            depth -= 1
+                        i += 1
+                    continue
+                i += 1
+            continue
+        if text[i] == "'":
+            j = i + 1
+            while j < n and text[j] != "'":
+                j += 2 if text[j] == "\\" else 1
+            i = min(j + 1, n)
+            continue
+        out.append(text[i])
+        i += 1
+    return "".join(out)
+
+
+OPEN = {"(": ")", "{": "}", "[": "]"}
+CLOSE = {v: k for k, v in OPEN.items()}
+
+
+def balance(text):
+    """-> (message, line) for the first bracket problem, else (None, 0)."""
+    stack = []
+    line = 1
+    for ch in strip_code(text):
+        if ch == "\n":
+            line += 1
+        if ch in OPEN:
+            stack.append((ch, line))
+        elif ch in CLOSE:
+            if not stack:
+                return ("unmatched '%s'" % ch, line)
+            opener, opened = stack.pop()
+            if OPEN[opener] != ch:
+                return ("'%s' opened on line %d is closed by '%s'" % (opener, opened, ch), line)
+    if stack:
+        opener, opened = stack[-1]
+        return ("unclosed '%s' from line %d" % (opener, opened), line)
+    return (None, 0)
+
+
+# ---------------------------------------------------------------- checks
+
+
+def check_resources(res):
+    problems = []
+    ref = re.compile(
+        r"\bR\.(string|drawable|mipmap|color|dimen|style|layout|anim|animator|xml|raw|id|array|"
+        r"plurals|integer|bool|font|menu|attr)\.([A-Za-z0-9_]+)"
+    )
+    for path in kotlin_files():
+        text = open(path, encoding="utf-8").read()
+        rel = os.path.relpath(path, ROOT)
+        for m in ref.finditer(text):
+            typ, name = m.group(1), m.group(2)
+            buckets = TYPE_DIRS.get(typ, (typ,))
+            if not any(name in res.get(b, set()) for b in buckets):
+                problems.append("%s: R.%s.%s is not defined in res/" % (rel, typ, name))
+    xmlref = re.compile(
+        r'"@(?:\+)?(string|drawable|mipmap|color|dimen|style|layout|anim|animator|xml|raw|id|array|'
+        r'plurals|integer|bool|font|menu|attr)/([A-Za-z0-9_.]+)"'
+    )
+    for path in [MANIFEST] + list(res_files()):
+        text = open(path, encoding="utf-8").read()
+        rel = os.path.relpath(path, ROOT)
+        for m in xmlref.finditer(text):
+            typ, name = m.group(1), m.group(2)
+            if name.startswith("android:"):
+                continue
+            buckets = TYPE_DIRS.get(typ, (typ,))
+            if not any(name in res.get(b, set()) for b in buckets):
+                problems.append("%s: @%s/%s is not defined in res/" % (rel, typ, name))
+    return problems
+
+
+def check_manifest():
+    problems = []
+    text = open(MANIFEST, encoding="utf-8").read()
+    try:
+        ET.fromstring(text)
+    except Exception as exc:
+        return ["AndroidManifest.xml does not parse: %s" % exc]
+    m = re.search(r'package="([^"]+)"', text)
+    ns = m.group(1) if m else None
+    if ns is None:
+        gradle = open(os.path.join(ROOT, "app", "build.gradle"), encoding="utf-8").read()
+        m = re.search(r'namespace\s*["\']([a-z0-9.]+)', gradle)
+        ns = m.group(1) if m else None
+        if ns is None:
+            return ["cannot determine the application id / namespace"]
+    pkg_dir = os.path.join(JAVA, ns.replace(".", "/"))
+    # An activity-alias names no class of its own.
+    aliases = set()
+    for m in re.finditer(r'<activity-alias\b[^>]*android:name="\.?([A-Za-z0-9_.]+)"', text, re.S):
+        aliases.add(m.group(1))
+    for m in re.finditer(r'android:name="(\.[A-Za-z0-9_.]+)"', text):
+        cls = m.group(1).lstrip(".")
+        if cls in aliases:
+            continue
+        rel = cls.replace(".", "/")
+        if not os.path.exists(os.path.join(pkg_dir, rel + ".kt")) and \
+           not os.path.exists(os.path.join(pkg_dir, rel + ".java")):
+            problems.append("manifest component %s.%s has no source file" % (ns, cls))
+    # exported must be explicit on API 31+ tooling; the components that are reachable from outside
+    for m in re.finditer(r"<(activity|service|receiver|provider)\b(.*?)</\1>|<(activity|service|receiver|provider)\b([^>]*)/>", text, re.S):
+        pass
+    return problems
+
+
+def check_kotlin_syntax():
+    problems = []
+    for path in kotlin_files():
+        raw = open(path, encoding="utf-8").read()
+        rel = os.path.relpath(path, ROOT)
+        if "<<<<<<<" in raw or ">>>>>>>" in raw:
+            problems.append("%s: unresolved merge marker" % rel)
+        msg, line = balance(raw)
+        if msg:
+            problems.append("%s:%d %s" % (rel, line, msg))
+    return problems
+
+
+# Members that genuinely did not exist at minSdk 24. Anything here must be inside a guarded function.
+API_LEVELS = {
+    "NotificationChannel": 26,
+    "AudioFocusRequest": 26,
+    "LAYOUT_IN_DISPLAY_CUTOUT_MODE": 27,
+    "TYPE_APPLICATION_OVERLAY": 26,
+    "setDisplayCutout": 27,
+    "isIgnoringBatteryOptimizations": 23,
+    "ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS": 23,
+    "FLAG_IMMUTABLE": 23,
+    "BluetoothManager": 18,
+    "ACTION_OPEN_DOCUMENT": 19,
+    "UsageStatsManager": 21,
+    "FLAG_ACTIVITY_LAUNCH_ADJACENT": 24,
+    "setShowBadge": 26,
+    "getRawInputDevices": 16,
+}
+
+
+def _function_body(lines, idx):
+    """Text of the function containing `lines[idx]`.
+
+    Walking up, the enclosing header is the first line where the brace balance goes negative — that is
+    the line whose `{` opened the block we are inside. Stopping at the nearest `fun|val|var` instead
+    would land on a local `val` and miss a `if (SDK_INT …) return` guard one line above it.
+    """
+    start = 0
+    depth = 0
+    for i in range(idx, -1, -1):
+        line = lines[i]
+        depth += line.count("}") - line.count("{")
+        if depth < 0 and re.search(r"\bfun\s+[A-Za-z_]", line):
+            start = i
+            break
+    end = min(len(lines) - 1, idx + 40)
+    depth = 0
+    seen = False
+    for i in range(start, min(len(lines), start + 200)):
+        depth += lines[i].count("{") - lines[i].count("}")
+        if "{" in lines[i]:
+            seen = True
+        if seen and depth <= 0:
+            end = i
+            break
+    return "\n".join(lines[start:end + 1])
+
+
+def check_api_guarding():
+    problems = []
+    for path in kotlin_files():
+        text = open(path, encoding="utf-8").read()
+        lines = text.split("\n")
+        rel = os.path.relpath(path, ROOT)
+        for needle, level in API_LEVELS.items():
+            if level <= 24:
+                continue
+            for m in re.finditer(re.escape(needle), text):
+                upto = text[:m.start()].count("\n")
+                line = lines[upto] if upto < len(lines) else ""
+                if line.strip().startswith("import ") or line.strip().startswith("*") or line.strip().startswith("//"):
+                    continue
+                body = _function_body(lines, upto)
+                if "SDK_INT" in body or "VERSION_CODES" in body:
+                    continue
+                window = "\n".join(lines[max(0, upto - 8):upto + 3])
+                if re.search(r"\btry\b|runCatching|\bcatch\b", window):
+                    continue
+                problems.append(
+                    "%s:%d uses %s (API %d) with no SDK_INT guard or try/catch in the function"
+                    % (rel, upto + 1, needle, level)
+                )
+    return problems
+
+
+def check_res_xml():
+    problems = []
+    for path in res_files():
+        rel = os.path.relpath(path, ROOT)
+        try:
+            ET.parse(path)
+        except Exception as exc:
+            problems.append("%s: XML does not parse (%s)" % (rel, exc))
+            continue
+        text = open(path, encoding="utf-8").read()
+        if "xmlns:android" not in text and re.search(r"\sandroid:[A-Za-z_]+\s*=", text):
+            problems.append("%s: uses android: attributes without declaring the namespace" % rel)
+        name = os.path.basename(path)[:-4]
+        if not re.match(r"^[a-z][a-z0-9_]*$", name):
+            problems.append("%s: resource file names must be lowercase [a-z0-9_]" % rel)
+    return problems
+
+
+def check_setters():
+    """Flag `set(v) = put(KEY, true)` — a setter that never reads its own parameter.
+
+    Found the hard way here: thirteen boolean preferences whose setter wrote a literal, so the switch
+    looked stuck in the UI and no amount of tapping changed behaviour. The compiler cannot catch it
+    (the code is valid Kotlin), and lint has no rule for it.
+    """
+    problems = []
+    single = re.compile(r"set\s*\(\s*(\w+)\s*\)\s*(?::\s*[\w<>?]+\s*)?=\s*(.+)$")
+    block_open = re.compile(r"set\s*\(\s*(\w+)\s*\)\s*\{")
+    for path in kotlin_files():
+        rel = os.path.relpath(path, ROOT)
+        lines = open(path, encoding="utf-8").read().split("\n")
+        for idx, raw in enumerate(lines):
+            line = raw.strip()
+            m = single.match(line)
+            if m and not line.startswith("//"):
+                var, expr = m.group(1), m.group(2)
+                if re.search(r"\bput\(|\bputString|\bputInt|\bputBoolean|\bputFloat", expr):
+                    if var not in expr:
+                        problems.append("%s:%d setter ignores its parameter: %s" % (rel, idx + 1, line))
+                continue
+            m2 = block_open.match(line)
+            if m2:
+                var = m2.group(1)
+                body = []
+                depth = line.count("{") - line.count("}")
+                j = idx
+                while j < len(lines) and (depth > 0 or j == idx):
+                    j += 1
+                    if j >= len(lines):
+                        break
+                    depth += lines[j].count("{") - lines[j].count("}")
+                    body.append(lines[j])
+                    if depth <= 0:
+                        break
+                text = "\n".join(body)
+                writes = re.findall(r"\bput\w*\(([^)]*)\)", text)
+                if writes and not any(var in w for w in writes):
+                    if not text.strip().startswith("//") and "editor" not in text and "value" not in text:
+                        problems.append("%s:%d setter block never uses %s" % (rel, idx + 1, var))
+    return problems
+
+
+def check_gradle():
+    problems = []
+    path = os.path.join(ROOT, "app", "build.gradle")
+    if not os.path.exists(path):
+        return ["app/build.gradle is missing"]
+    text = open(path, encoding="utf-8").read()
+    for needle in ("compileSdk", "minSdk", "applicationId", "kotlin"):
+        if needle not in text:
+            problems.append("app/build.gradle: no %s found" % needle)
+    if "com.android.application" not in text:
+        problems.append("app/build.gradle: the android application plugin is not applied")
+    return problems
+
+
+def main():
+    res = collect_resources()
+    sections = [
+        ("resources", check_resources(res)),
+        ("manifest", check_manifest()),
+        ("kotlin syntax", check_kotlin_syntax()),
+        ("api guarding", check_api_guarding()),
+        ("res xml", check_res_xml()),
+        ("gradle", check_gradle()),
+        ("setter hygiene", check_setters()),
+    ]
+    total = 0
+    for title, problems in sections:
+        print("== %s: %d issue(s)" % (title, len(problems)))
+        for p in problems[:80]:
+            print("   -", p)
+        total += len(problems)
+    print("\n%d issue(s), %d kotlin files, %d res xml files"
+          % (total, len(list(kotlin_files())), len(list(res_files()))))
+    return 1 if total else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

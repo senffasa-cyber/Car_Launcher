@@ -1,0 +1,102 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+android {
+    namespace 'com.arena.carlauncher'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.arena.carlauncher"
+        // 24 = Android 7.0: the oldest firmware still shipped on SPRD/Unisoc head units.
+        minSdk 24
+        // NOTE (intentional!): we deliberately target API 29 even though we compile against 34.
+        // Android 11+ package-visibility filtering (QUERY_ALL_PACKAGES) would hide the music /
+        // navigation / dashcam apps this launcher has to enumerate and launch. targetSdk 29 keeps
+        // the app drawer, media-session picker and nav-app discovery working on 10/12/13 units,
+        // and lets the notification-listener + usage-stats integrations behave like they do on 10.
+        targetSdk 29
+        versionCode 1
+        versionName "1.0.0"
+        resourceConfigurations += ["en", "fa"]
+    }
+
+    signingConfigs {
+        // Sideloading-friendly: `assembleRelease` produces an installable APK signed with the
+        // local debug key. Point CAR_LAUNCHER_KEYSTORE at a real keystore for distribution.
+        release {
+            storeFile file(System.getenv("CAR_LAUNCHER_KEYSTORE")
+                    ?: new File(System.getProperty("user.home"), ".android/debug.keystore"))
+            storePassword System.getenv("CAR_LAUNCHER_STORE_PASSWORD") ?: "android"
+            keyAlias System.getenv("CAR_LAUNCHER_KEY_ALIAS") ?: "androiddebugkey"
+            keyPassword System.getenv("CAR_LAUNCHER_KEY_PASSWORD") ?: "android"
+        }
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+            applicationIdSuffix ""
+        }
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+        // '-opt-in' rather than the old '-Xopt-in': the latter warns on Kotlin 1.9.
+        freeCompilerArgs += ['-opt-in=kotlin.RequiresOptIn']
+    }
+
+    // No XML layouts at all: every view is built in code (see ui/Views.kt), so viewBinding would
+    // generate nothing and BuildConfig is not referenced anywhere.
+    buildFeatures {
+        viewBinding false
+        buildConfig false
+    }
+
+    packaging {
+        resources {
+            excludes += ['META-INF/*.kotlin_module', 'DebugProbesKt.bin', 'kotlin-tooling-metadata.json']
+        }
+    }
+
+    lint {
+        // Head-unit firmware is quirky: never let a lint finding block the build.
+        abortOnError false
+        checkReleaseBuilds false
+        disable 'NewApi', 'UnusedResources', 'SetTextI18n', 'RtlHardcoded', 'RtlSymmetry',
+                'HardcodedText', 'MissingTranslation', 'ExpiredTargetSdkVersion', 'GradleDependency',
+                'OldTargetApi', 'NotifyPermissionStyle', 'HapticsBlocklist'
+    }
+
+    androidResources {
+        ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+    }
+}
+
+dependencies {
+    // Exactly what the sources import: a 2.7 GB RAM Unisoc unit must stay resident without being
+    // OOM-killed, so no Compose, no Glide, no OkHttp, no DI framework — every line below earns its place, so a build over a slow
+    // OTA link stays small and there is no unused Kotlin metadata to dex.
+    implementation 'androidx.core:core-ktx:1.12.0'                 // ContextCompat, FileProvider, toBitmap
+    implementation 'androidx.appcompat:appcompat:1.6.1'           // AppCompatActivity + AppCompat widgets (RTL-safe text views)
+    implementation 'androidx.recyclerview:recyclerview:1.3.2'    // app grid, search results, settings list
+    implementation 'androidx.viewpager2:viewpager2:1.0.0'        // the centre carousel
+    implementation 'androidx.lifecycle:lifecycle-service:2.7.0'  // LauncherService lifetime + scope
+    implementation 'androidx.media:media:1.7.0'                   // MediaSessionCompat token bridge
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
+    // Not used, deliberately: Compose (RAM), Glide/OkHttp (ImageCache + HttpURLConnection cover it),
+    // androidx.preference (the settings screen is hand-built), any maps SDK (no API key, works where
+    // Google is blocked).
+}

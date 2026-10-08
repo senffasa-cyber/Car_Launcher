@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Exported settings live in the app's own cache dir and are shared through the FileProvider; no
+  external storage permission is requested anywhere, which matters on these units where
+  WRITE_EXTERNAL_STORAGE is often silently denied.
+-->
+<paths>
+    <cache-path name="exports" path="exports/" />
+    <files-path name="files" path="." />
+</paths>
