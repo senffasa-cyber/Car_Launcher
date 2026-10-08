@@ -783,7 +783,7 @@ object LogSheet {
             }
             scroll.addView(tv)
             sheet.setContentView(scroll, android.widget.FrameLayout.LayoutParams(
-                android.widget.FrameLayout.LayoutParams.MATCH_PARENT, Views.dp(ctx, 420)
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT, Views.dp(ctx, 420f)
             ))
             sheet.window?.setBackgroundDrawable(Palette.card(ctx, radiusDp = 18f, alphaPercent = 98, clickable = false))
             sheet.show()

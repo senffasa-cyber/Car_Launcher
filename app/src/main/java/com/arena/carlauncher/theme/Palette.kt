@@ -152,9 +152,13 @@ object Palette {
         val a = if (alphaPercent < 0) (p?.cardAlphaPercent ?: 82) else alphaPercent
         val fill = Format.withAlpha(colors.surface, a)
         val top = Format.withAlpha(colors.surfaceRaised, if (a > 12) (a * 0.55f).toInt() else a)
+        // Read outside the apply: `colors` inside it is GradientDrawable.getColors(), not Palette.colors —
+        // the same name on the receiver silently wins, and the reference does not resolve.
+        val hairline = Format.withAlpha(colors.outline, 90)
+        val stroke = Format.dp(ctx, 1f).toInt().coerceAtLeast(1)
         val shape = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(top, fill)).apply {
             cornerRadius = r
-            if (border) setStroke(Format.dp(ctx, 1f).toInt().coerceAtLeast(1), Format.withAlpha(colors.outline, 90))
+            if (border) setStroke(stroke, hairline)
         }
         if (!clickable) return shape
         val mask = GradientDrawable().apply {
@@ -181,11 +185,13 @@ object Palette {
     fun chip(ctx: Context, selected: Boolean = false): Drawable {
         val fill = if (selected) colors.accent
         else Format.withAlpha(colors.surfaceRaised, if (night) 90 else 78)
+        // Same trap as card(): hoist the palette reads, `colors` here would be the drawable's own.
+        val hairline = Format.withAlpha(colors.outline, 90)
         val d = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = Format.dp(ctx, 999f)
             setColor(fill)
-            if (!selected) setStroke(Format.dp(ctx, 1f).toInt(), Format.withAlpha(colors.outline, 90))
+            if (!selected) setStroke(Format.dp(ctx, 1f).toInt(), hairline)
         }
         return if (selected) d else RippleDrawable(
             ColorStateList.valueOf(Format.withAlpha(colors.accent, 55)), d, d

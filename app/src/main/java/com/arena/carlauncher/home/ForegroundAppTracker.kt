@@ -41,8 +41,14 @@ class ForegroundAppTracker : AccessibilityService() {
         fun enabled(ctx: Context): Boolean = try {
             val am = ctx.getSystemService(Context.ACCESSIBILITY_SERVICE) as? android.view.accessibility.AccessibilityManager
             val mine = ctx.packageName
+            // AccessibilityServiceInfo has no package of its own: `packageNames` is the *filter* the
+            // service declares (null for "all"), so the provider comes from its ResolveInfo, with the
+            // component id (`pkg/class`) as the fallback for ROMs that leave resolveInfo unset.
             am?.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
-                .orEmpty().any { it.packageName == mine }
+                .orEmpty().any { info ->
+                    val pkg = info.resolveInfo?.packageName
+                    if (pkg != null) pkg == mine else info.id.orEmpty().startsWith("$mine/")
+                }
         } catch (_: Throwable) {
             false
         }

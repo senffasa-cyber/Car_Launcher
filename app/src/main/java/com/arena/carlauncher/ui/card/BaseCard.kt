@@ -59,7 +59,7 @@ abstract class BaseCard(
         onCreate()
     }
 
-    protected fun cardBackground(): Drawable = Palette.card(context, elevated = true)
+    protected fun cardBackground(): Drawable = Palette.card(context)
 
     protected open fun onCreate() = Unit
 

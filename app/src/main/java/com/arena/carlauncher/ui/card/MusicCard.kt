@@ -220,11 +220,12 @@ class MusicCard(context: Context, full: Boolean) : BaseCard(context, Cards.MUSIC
             cover.setImageResource(R.drawable.ic_music)
             cover.scaleType = ImageView.ScaleType.CENTER_INSIDE
             cover.setColorFilter(Palette.colors.onSurfaceMuted)
-            cover.setPadding(Views.dp(context, if (full) 34f else 10f))
+            val pad = Views.dp(context, if (full) 34f else 10f)
+            cover.setPadding(pad, pad, pad, pad)
             return
         }
         cover.clearColorFilter()
-        cover.setPadding(0)
+        cover.setPadding(0, 0, 0, 0)
         cover.scaleType = ImageView.ScaleType.CENTER_CROP
         val radius = Views.dp(context, if (full) 16f else 12f).toFloat()
         cover.setImageBitmap(ImageCache.rounded(art, radius))

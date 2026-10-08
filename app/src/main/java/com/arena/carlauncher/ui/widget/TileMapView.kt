@@ -270,8 +270,8 @@ class TileMapView @JvmOverloads constructor(
             for (ty in ty0..ty1) {
                 if (ty < 0 || ty >= count) continue
                 val wrapped = ((tx % count) + count) % count
-                val screenX = (tx * tile - centerWx) + cx
-                val screenY = (ty * tile - centerWy) + cy
+                val screenX = ((tx * tile - centerWx) + cx).toFloat()
+                val screenY = ((ty * tile - centerWy) + cy).toFloat()
                 rect.set(screenX, screenY, screenX + tile, screenY + tile)
                 val bmp: Bitmap? = MapEngine.peek(z, wrapped, ty)
                 if (bmp != null && !bmp.isRecycled) {

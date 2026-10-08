@@ -480,6 +480,37 @@ def check_member_shapes():
     return problems
 
 
+def check_apply_shadowing():
+    """`someDrawable.apply { colors.outline }` reads `GradientDrawable.getColors()`, not `Palette.colors`.
+
+    An apply block puts the receiver first in the name space, so a property that happens to exist on
+    both the receiver and the enclosing object resolves to the receiver — which for `colors` (a colour
+    *array* on every drawable) is either a type error or, worse, silently the wrong thing. Palette
+    hoists those reads out; this rule keeps new code honest about it.
+    """
+    problems = []
+    # The receiver is on the same line as `.apply {` in every site we write; matching the type name
+    # anywhere on the line is deliberate — an argument list full of `)` defeated a stricter pattern.
+    starts = re.compile(r"\.apply\s*\{\s*$")
+    receiver = re.compile(r"(Drawable|Paint|ColorFilter|LruCache|LayoutParams|ViewHolder)\b")
+    bad = re.compile(r"(?<![\w.])colors\.")
+    for path in kotlin_files():
+        rel = os.path.relpath(path, ROOT)
+        lines = open(path, encoding="utf-8").read().split("\n")
+        for idx, line in enumerate(lines):
+            if not starts.search(line.rstrip()) or not receiver.search(line):
+                continue
+            depth = 0
+            for j in range(idx, min(len(lines), idx + 14)):
+                depth += lines[j].count("{") - lines[j].count("}")
+                if j > idx and bad.search(lines[j].strip()) and "Palette.colors" not in lines[j]:
+                    problems.append("%s:%d inside that apply, `colors` is the drawable's own colour array: %s"
+                                    % (rel, j + 1, lines[j].strip()[:90]))
+                if depth <= 0 and j > idx:
+                    break
+    return problems
+
+
 def check_gradle():
     problems = []
     path = os.path.join(ROOT, "app", "build.gradle")
@@ -506,6 +537,7 @@ def main():
         ("setter hygiene", check_setters()),
         ("layoutparams receiver", check_layoutparams_receiver()),
         ("member shapes", check_member_shapes()),
+        ("apply shadowing", check_apply_shadowing()),
     ]
     total = 0
     for title, problems in sections:

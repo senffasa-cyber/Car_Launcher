@@ -15,7 +15,7 @@ import android.service.notification.StatusBarNotification
 import android.util.Log
 import android.view.KeyEvent
 import android.media.session.MediaController
-import android.media.session.MediaMetadata
+import android.media.MediaMetadata
 import android.media.session.PlaybackState
 import androidx.core.app.NotificationManagerCompat
 import com.arena.carlauncher.data.LauncherPrefs
