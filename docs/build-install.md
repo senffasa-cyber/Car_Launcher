@@ -3,8 +3,9 @@
 ## ۰. کوتاه‌ترین راه: APK آماده از GitHub
 
 اگر فقط APK می‌خواهید و لازم نیست خودتان بسازید: در ریپو تب **Actions** ← انتخاب آخرین run سبز ← پایین
-صفحه ← artifact به نام `carlauncher-apk`. داخلش `carlauncher-debug.apk` و `carlauncher-release.apk` است
-(هر دو ≈ ۳۸۰ کیلوبایت؛ روی دستگاه ۲٫۷۲ گیگ، نسخه‌ی release را نصب کنید). artifact سی روز می‌ماند؛ برای
+صفحه ← artifact به نام `carlauncher-apk`. داخلش دو فایل است: `carlauncher-debug.apk` و
+`carlauncher-release.apk` — روی دستگاه ۲٫۷۲ گیگ، نسخه‌ی release را نصب کنید (هر دو زیر ۱٫۵ مگابایت؛
+اگر بیشتر شد یعنی چیزی به اشتباه به APK اضافه شده). artifact سی روز می‌ماند؛ برای
 همیشه، tag با پیشوند `v` بزنید — همان workflow یک GitHub Release با هر دو APK منتشر می‌کند. با ابزار هم:
 
 ```bash

@@ -164,7 +164,7 @@ adb shell am broadcast -a arena.car.VEHICLE --ef speed 47.5 --ef coolant 88   # 
 
 ### APK آماده از GitHub
 
-۱. تب **Actions** ← تازه‌ترین run سبز ← پایین صفحه ← `carlauncher-apk` (یک zip با `carlauncher-debug.apk`
+۱. تب **Actions** ← تازه‌ترین run سبز ← پایین صفحه ← `carlauncher-apk` (یک zip با دو فایل `carlauncher-debug.apk`
    و `carlauncher-release.apk`). artifact سی روز می‌ماند؛ tag با پیشوند `v` یک GitHub Release می‌سازد.
 ۲. اگر `gh` نصب دارید: `gh run download <run-id> -n carlauncher-apk`.
 ۳. نصب: `adb install -r carlauncher-release.apk` — یا کپی روی فلش و نصب مستقیم، که روی هده‌یونیت

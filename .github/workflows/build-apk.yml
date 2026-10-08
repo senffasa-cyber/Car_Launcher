@@ -149,9 +149,13 @@ jobs:
         run: |
           mkdir -p out
           for f in $(find app/build/outputs/apk -name '*.apk' 2>/dev/null); do
-            variant=$(basename "$(dirname "$(dirname "$f")")")
+            # The variant is the *immediate* parent (`…/apk/debug/app-debug.apk`); the extra dirname here
+            # once produced `apk` for both, so debug and release copied onto one file name and the second
+            # overwrote the first — a release with a single asset that looked entirely successful.
+            variant=$(basename "$(dirname "$f")")
             cp "$f" "out/carlauncher-$variant.apk"
           done
+          ls -l out/*.apk | awk '{print "collected " $5 " bytes  " $9}'
           ls -la out
           if [ -z "$(ls -A out 2>/dev/null)" ]; then echo "no APK produced"; exit 1; fi
 
