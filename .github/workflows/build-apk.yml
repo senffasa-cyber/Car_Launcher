@@ -37,16 +37,29 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install platform + build-tools
-        run: sdkmanager --install "platforms;android-34" "build-tools;34.0.0" "platform-tools"
+      # The ubuntu-latest image already ships an Android SDK, and installing a second one through
+      # android-actions/setup-android costs a minute and can break on image updates. Use what is there,
+      # and only call sdkmanager if the exact platform AGP wants is missing.
+      - name: Point the build at the Android SDK
+        run: |
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          echo "sdk.dir=$SDK" > local.properties
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "--- SDK contents:"; ls "$SDK" || { echo "no SDK at $SDK"; exit 1; }
+          echo "--- platforms:"; ls "$SDK/platforms" 2>/dev/null || true
+          if [ ! -d "$SDK/platforms/android-34" ]; then
+            MGR="$SDK/cmdline-tools/latest/bin/sdkmanager"
+            [ -x "$MGR" ] || MGR="$(command -v sdkmanager || true)"
+            [ -n "$MGR" ] || { echo "sdkmanager not found; cannot install android-34"; exit 1; }
+            yes | "$MGR" --licenses > /dev/null 2>&1 || true
+            "$MGR" --install "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+          fi
 
       # app/build.gradle signs `release` with ~/.android/debug.keystore so that sideloading works without
       # any secrets; the runner has no such file, so make one. Replace it with CAR_LAUNCHER_KEYSTORE
