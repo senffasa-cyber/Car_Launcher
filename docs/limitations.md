@@ -81,8 +81,10 @@ python3 tools/validate_jalali.py# 73,414 روز تقویم شمسی، رفت و 
    شده‌اند ولی `Locale`/`Configuration` روی فریمور چینی را باید دید).
 3. **حالت خواب**: `ScreenOffHelper` و `CallOverlayService` آماده‌اند؛ «خاموش شدن صفحه با تأخیر» فقط از
    اکشن `screen:off` و `idleDimSec` (کاهش نور) در دسترس است، نه یک UI مستقل.
-4. **پروفایل مصرف**: `SimpleMemoryProfile` در `LauncherService` فقط لاگ می‌گیرد؛ یک خط «hprof اگر > ۱۲۰
-   مگ بود» ارزشش را دارد، چون این دستگاه‌ها دقیقاً همان‌جا می‌میرند.
+4. **پروفایل مصرف**: `CarApp.onTrimMemory` کش‌ها را نصف می‌کند (`ImageCache.trim()` و
+   `MapEngine.trimMemory()`)، ولی هیچ سنجشی در اپ نیست — لاگ heap یا hprof خودکار. برای دیدن عدد واقعی
+   باید از بیرون نگاه کرد: `adb shell dumpsys meminfo com.arena.carlauncher`. اگر یک روز این اپ همان‌جا
+   بمیر که دستگاه‌های کم‌رم می‌میرند، آن خط hprof ارزش نوشتن دارد.
 5. `MediaHub` از **سه** مسیر تغذیه می‌شود (`MediaSessionManager.getActiveSessions`,
    `MediaNotificationListener`, `MediaController` transport) — اگر پخش‌کننده‌ای در هیچ‌کدام نبود،
    `pref_media_source` را دستی روی همان بسته قفل کنید.

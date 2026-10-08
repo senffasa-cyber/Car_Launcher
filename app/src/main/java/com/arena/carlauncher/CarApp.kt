@@ -4,6 +4,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.ComponentCallbacks2
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -65,6 +66,22 @@ class CarApp : android.app.Application() {
         if (prefs.bootStart) {
             LauncherService.start(this, "boot")
         }
+    }
+
+    /**
+     * The callback a launcher on a 2.72 GB head unit has to answer: the framework asks for memory back
+     * *before* it starts killing processes, and our two bitmap caches are the cheapest thing to give up.
+     * Half, not all — an emptied tile cache means every visible tile goes back to the network, which the
+     * user feels far more than the few megabytes freed.
+     */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        val critical = level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW
+        ImageCache.trim()
+        MapEngine.trimMemory()
+        // Under real pressure the decoded-icon reuse pool is the next thing to relax; nothing is
+        // `System.gc()`-ed — that only costs a frame and buys a few kilobytes.
+        if (critical) ImageCache.trim()
     }
 
     override fun onTerminate() {
