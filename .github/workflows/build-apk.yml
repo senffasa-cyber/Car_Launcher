@@ -96,13 +96,47 @@ jobs:
           git diff --exit-code app/src/main/res || {
             echo "::error::generated resources are out of date; run tools/gen_strings.py + gen_icons.py and commit"; git status --short; exit 1; }
 
+      # The runner's raw log is served from blob storage that outside tooling often cannot fetch, so
+      # every compiler diagnostic is mirrored into a check annotation: `gh api
+      # /repos/<repo>/check-runs/<job>/annotations` then shows exactly what broke.
       - name: Assemble debug APK
-        run: ./gradlew --no-daemon --stacktrace --console=plain assembleDebug
+        run: |
+          emit() {
+            grep -E "$1" /tmp/dbg.log | head -n "$2" \
+              | sed 's|/home/runner/work/[^/]*/[^/]*/||g' \
+              | awk 'BEGIN{ORS=""} {gsub(/%/, "%25"); if (NR > 1) printf "%s", "%0A"; print}'
+          }
+          set +e
+          ./gradlew --no-daemon --console=plain assembleDebug > /tmp/dbg.log 2>&1
+          rc=$?
+          set -e
+          tail -30 /tmp/dbg.log
+          if [ $rc -ne 0 ]; then
+            echo "error count: $(grep -cE '^e: file://' /tmp/dbg.log)"
+            echo "::error title=Kotlin errors (first 40)::$(emit '^e: file://' 40)"
+            echo "::error title=Gradle failure::$(emit 'FAILURE:|What went wrong|Execution failed|Caused by' 25)"
+            exit $rc
+          fi
+          echo "debug ok: $(find app/build/outputs/apk -name '*.apk' | head -1)"
 
       - name: Assemble release APK (R8 + resource shrinking)
         if: always()
         continue-on-error: true
-        run: ./gradlew --no-daemon --stacktrace --console=plain assembleRelease
+        run: |
+          emit() {
+            grep -E "$1" /tmp/rel.log | head -n "$2" \
+              | sed 's|/home/runner/work/[^/]*/[^/]*/||g' \
+              | awk 'BEGIN{ORS=""} {gsub(/%/, "%25"); if (NR > 1) printf "%s", "%0A"; print}'
+          }
+          set +e
+          ./gradlew --no-daemon --console=plain assembleRelease > /tmp/rel.log 2>&1
+          rc=$?
+          set -e
+          tail -20 /tmp/rel.log
+          if [ $rc -ne 0 ]; then
+            echo "::error title=release build failed (R8 / shrinking)::$(emit 'FAILURE:|What went wrong|Missing class|error:|Caused by' 30)"
+          fi
+          exit 0
 
       - name: Lint report (non-blocking)
         if: always()
